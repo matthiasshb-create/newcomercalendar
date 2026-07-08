@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>새신자교육_학사일정</title>
+<style>
+  :root{
+    --bg:#f5f6f8;
+    --card:#ffffff;
+    --border:#e2e5ea;
+    --text:#1f2430;
+    --muted:#9aa1ac;
+    --accent:#3b6ef6;
+    --today:#fff4e0;
+    --sun:#e0523f;
+    --sat:#3b6ef6;
+    --season-a:#eef1f6;
+    --season-b:#e4e8f0;
+    --season-accent:#3b6ef6;
+  }
+  /* 계절/월별 색상은 아래 스크립트의 MONTHS 테이블에서 JS로 직접 지정됩니다. */
+
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+    background:linear-gradient(160deg, var(--season-a), var(--season-b) 55%, var(--bg) 100%);
+    background-attachment:fixed;
+    transition:background 0.8s ease;
+    color:var(--text);
+    padding:20px 32px;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+  }
+  .wrap{max-width:1400px;width:100%;margin:0 auto;display:flex;gap:24px;align-items:stretch;flex:1;min-height:0;}
+  .main-col{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;}
+  .sidebar{width:260px;flex-shrink:0;display:flex;flex-direction:column;}
+  .header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:20px;
+  }
+  .title-group{display:flex;align-items:center;gap:14px;}
+  .season-badge{font-size:30px;line-height:1;align-self:center;}
+  .header h1{font-size:26px;margin:0;font-weight:800;}
+  .title-divider{width:2px;align-self:stretch;background:var(--border);}
+  .term-label{font-size:26px;font-weight:800;color:#1e3a5f;}
+  .nav-btns button{
+    border:1px solid var(--border);
+    background:var(--card);
+    border-radius:6px;
+    padding:5px 10px;
+    font-size:12px;
+    cursor:pointer;
+    margin-left:6px;
+  }
+  .nav-btns button:hover{background:var(--season-a);border-color:var(--season-accent);}
+
+  .term-bar{display:flex;gap:14px;flex-wrap:wrap;align-items:stretch;margin-bottom:20px;}
+  .term-picker{
+    display:inline-flex;
+    align-items:center;
+    gap:10px;
+    background:var(--card);
+    border:2px solid var(--season-accent);
+    border-radius:12px;
+    padding:12px 16px;
+    font-size:16px;
+    box-shadow:0 6px 18px rgba(0,0,0,.06);
+    transition:border-color 0.8s ease;
+    box-sizing:border-box;
+  }
+  .term-picker.term-picker-fixed{
+    flex:1 1 400px;
+    min-width:400px;
+    justify-content:space-between;
+    white-space:nowrap;
+  }
+  .term-picker label{font-weight:800;color:var(--text);white-space:nowrap;}
+  .term-picker input[type="date"]{
+    border:none;
+    font-size:17px;
+    font-weight:700;
+    font-family:inherit;
+    color:var(--season-accent);
+    background:transparent;
+    cursor:pointer;
+    transition:color 0.8s ease;
+    white-space:nowrap;
+  }
+  .term-picker.tentative-picker{
+    border-style:dashed;
+    border-color:var(--muted);
+  }
+  .term-picker.tentative-picker label{color:var(--muted);}
+  .term-picker.tentative-picker input[type="date"]{color:var(--muted);}
+  .term-clear{
+    border:1px solid var(--border);
+    background:transparent;
+    border-radius:6px;
+    padding:6px 12px;
+    font-size:13px;
+    color:var(--muted);
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  .term-clear:hover{background:#f2f3f6;}
+
+  .term-picker.confirmed-list-box{
+    width:100%;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:12px;
+    box-sizing:border-box;
+  }
+  .confirmed-list-box .confirmed-list-label{
+    font-weight:800;
+    color:var(--text);
+    flex-shrink:0;
+  }
+  .confirmed-sync-status{
+    font-size:11px;
+    color:var(--muted);
+  }
+  .term-add{
+    border:none;
+    background:var(--season-accent);
+    color:#fff;
+    border-radius:8px;
+    padding:8px 14px;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+    flex-shrink:0;
+    transition:background 0.8s ease;
+  }
+  .term-add:hover{filter:brightness(1.08);}
+
+  .confirmed-list{display:flex;gap:8px;flex-wrap:wrap;}
+  .confirmed-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:5px 8px 5px 12px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--text);
+  }
+  .confirmed-chip button{
+    border:none;
+    background:#eceff3;
+    color:var(--muted);
+    width:18px;
+    height:18px;
+    line-height:18px;
+    border-radius:50%;
+    font-size:12px;
+    cursor:pointer;
+    padding:0;
+  }
+  .confirmed-chip button:hover{background:var(--sun);color:#fff;}
+
+  .legend{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
+  .legend-dot{width:10px;height:10px;border-radius:50%;}
+
+  .calendar{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:16px;
+    overflow:hidden;
+    box-shadow:0 12px 32px rgba(20,25,40,.07);
+    flex:1;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+  }
+  .weekdays{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    background:linear-gradient(to bottom, var(--season-a), #fafbfc 120%);
+    border-bottom:1px solid var(--border);
+    transition:background 0.8s ease;
+    flex-shrink:0;
+  }
+  .weekdays div{
+    text-align:center;
+    padding:10px 0;
+    font-size:13px;
+    font-weight:700;
+    color:var(--muted);
+  }
+  .weekdays div:first-child{color:var(--sun);}
+  .weekdays div:last-child{color:var(--sat);}
+
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    grid-auto-rows:minmax(165px,auto);
+    flex:1;
+    min-height:0;
+  }
+  .cell{
+    display:flex;
+    flex-direction:column;
+    border-right:1px solid var(--border);
+    border-bottom:1px solid var(--border);
+    padding:8px 8px 8px;
+    position:relative;
+    overflow:visible;
+    min-width:0;
+  }
+  .cell:nth-child(7n){border-right:none;}
+  .cell.other-month{background:#fbfbfc;}
+  .cell.other-month .date-num{color:#d3d6db;}
+  .cell.today{
+    background:var(--today);
+    box-shadow:inset 0 0 0 2px var(--season-accent);
+    transition:box-shadow 0.8s ease;
+  }
+
+  .date-row{display:flex;align-items:baseline;gap:5px;min-width:0;}
+  .date-num{
+    font-size:14px;
+    font-weight:700;
+    color:var(--text);
+    flex-shrink:0;
+  }
+  .cell.sunday .date-num{color:var(--sun);}
+  .cell.saturday .date-num{color:var(--sat);}
+
+  .holiday-label{
+    font-size:10px;
+    font-weight:700;
+    color:var(--sun);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    min-width:0;
+  }
+
+  .events{margin-top:6px;flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;}
+  .event{
+    position:relative;
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:2px;
+    text-align:center;
+    padding:8px;
+    border-radius:14px;
+    color:#fff;
+    cursor:default;
+    min-width:0;
+    overflow:hidden;
+    isolation:isolate;
+  }
+  .event::before{
+    content:'';
+    position:absolute;
+    inset:0;
+    background:linear-gradient(165deg, rgba(255,255,255,.32), rgba(255,255,255,0) 50%);
+    pointer-events:none;
+  }
+  .event-icon{
+    position:absolute;
+    top:7px;
+    left:9px;
+    font-size:16px;
+    line-height:1;
+    opacity:.85;
+  }
+  .event-cat{
+    font-size:26px;
+    font-weight:800;
+    letter-spacing:-.5px;
+    opacity:.95;
+  }
+  .event-round{
+    display:flex;
+    align-items:baseline;
+    gap:4px;
+  }
+  .round-num{
+    font-size:30px;
+    font-weight:800;
+    letter-spacing:-.5px;
+  }
+  .round-unit{
+    font-size:16px;
+    font-weight:600;
+    opacity:.88;
+  }
+  .event-solo{
+    font-size:25px;
+    font-weight:800;
+  }
+  .event.tentative::before{ display:none; }
+  .tentative-badge{
+    position:absolute;
+    top:6px;
+    right:8px;
+    font-size:10px;
+    font-weight:800;
+    letter-spacing:.2px;
+    padding:1px 6px;
+    border-radius:6px;
+  }
+
+  .decor{
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+    pointer-events:none;
+    z-index:0;
+  }
+  .particle{
+    position:absolute;
+    top:0;
+    will-change:transform,opacity;
+    user-select:none;
+  }
+  .fall-particle{ animation-name:fall-drift; animation-timing-function:linear; animation-iteration-count:infinite; }
+  .rise-particle{ animation-name:rise-drift; animation-timing-function:linear; animation-iteration-count:infinite; }
+  @keyframes fall-drift{
+    0%{ transform:translateY(-10vh) translateX(0) rotate(0deg); opacity:0; }
+    10%{ opacity:.8; }
+    90%{ opacity:.8; }
+    100%{ transform:translateY(110vh) translateX(var(--drift,30px)) rotate(300deg); opacity:0; }
+  }
+  @keyframes rise-drift{
+    0%{ transform:translateY(10vh) translateX(0); opacity:0; }
+    10%{ opacity:.75; }
+    90%{ opacity:.75; }
+    100%{ transform:translateY(-110vh) translateX(var(--drift,20px)); opacity:0; }
+  }
+
+  .wave-wrap{
+    position:fixed;
+    left:0; right:0; bottom:0;
+    height:150px;
+    overflow:hidden;
+    pointer-events:none;
+    z-index:0;
+    display:none;
+  }
+  .wave-svg{
+    position:absolute;
+    bottom:-2px;
+    left:0;
+    width:200%;
+    height:100%;
+    animation:wave-scroll 16s linear infinite;
+  }
+  .wave-svg.wave-back{ animation-duration:24s; }
+  @keyframes wave-scroll{ from{ transform:translateX(0); } to{ transform:translateX(-50%); } }
+
+  @media (prefers-reduced-motion: reduce){
+    .particle, .wave-svg{ animation:none !important; opacity:0 !important; }
+  }
+
+  .wrap{position:relative;z-index:1;}
+
+  @media (max-width:900px){
+    .wrap{flex-direction:column;}
+    .sidebar{width:100%;position:static;}
+  }
+
+  @media print{
+    body{padding:0;background:#fff;height:auto;overflow:visible;}
+    .wrap{height:auto;}
+    .main-col{min-height:auto;}
+    .calendar{flex:none;min-height:auto;}
+    .nav-btns{display:none;}
+    .grid{grid-auto-rows:140px;grid-template-rows:none !important;flex:none;min-height:auto;}
+    .decor, .wave-wrap{display:none !important;}
+    .sidebar{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="decor" id="decor"></div>
+<div class="wave-wrap" id="waveWrap">
+  <svg class="wave-svg wave-back" viewBox="0 0 2400 150" preserveAspectRatio="none">
+    <path d="M0,90 C150,150 350,30 600,90 C850,150 1050,30 1200,90 C1350,150 1550,30 1800,90 C1950,150 2150,30 2400,90 L2400,150 L0,150 Z" fill="var(--season-accent)" opacity="0.18"/>
+  </svg>
+  <svg class="wave-svg wave-front" viewBox="0 0 2400 150" preserveAspectRatio="none">
+    <path d="M0,105 C150,150 350,60 600,105 C850,150 1050,60 1200,105 C1350,150 1550,60 1800,105 C1950,150 2150,60 2400,105 L2400,150 L0,150 Z" fill="var(--season-accent)" opacity="0.3"/>
+  </svg>
+</div>
+<div class="wrap">
+  <div class="main-col">
+    <div class="header">
+      <div class="title-group">
+        <span class="season-badge" id="seasonBadge"></span>
+        <h1 id="title"></h1>
+        <span class="title-divider"></span>
+        <span class="term-label" id="termLabel"></span>
+      </div>
+      <div class="nav-btns">
+        <button onclick="changeMonth(-1)">◀ 이전달</button>
+        <button onclick="changeMonth(1)">다음달 ▶</button>
+        <button onclick="exportImage()">🖼 이미지 저장</button>
+      </div>
+    </div>
+
+    <div class="term-bar">
+      <div class="term-picker term-picker-fixed">
+        <label for="confirmedInput">확정 종강일 추가</label>
+        <input type="date" id="confirmedInput">
+        <button class="term-add" onclick="addConfirmed()">확정 추가</button>
+      </div>
+      <div class="term-picker tentative-picker term-picker-fixed">
+        <label for="plannedInput">예정 종강일</label>
+        <input type="date" id="plannedInput">
+        <button class="term-clear" onclick="clearPlanned()">지우기</button>
+      </div>
+    </div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="calendar">
+      <div class="weekdays">
+        <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+
+  <aside class="sidebar">
+    <div class="term-picker confirmed-list-box">
+      <span class="confirmed-list-label">확정된 종강일</span>
+      <div class="confirmed-list" id="confirmedList"></div>
+      <span class="confirmed-sync-status" id="confirmedSyncStatus"></span>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════
+   여기만 바꾸면 됩니다. (종강일 기준 자동 계산)
+   ══════════════════════════════════════════════ */
+
+// 1) 표시할 연/월 (month는 1~12) — 처음 열었을 때 보여줄 달
+let YEAR = 2026;
+let MONTH = 8;
+
+// 2) 종강일 — 위쪽 "확정/예정 종강일" 선택기로 바꿀 수 있습니다.
+//    확정은 여러 기수를 계속 추가할 수 있습니다.
+//    예정은 저장되지 않는 임시 계산용(다음 기수 미리보기)이라 하나만 유지됩니다.
+
+// 2-1) 확정 종강일을 여러 사람과 공유하려면, Apps Script 웹앱 배포 후 그 URL을 여기 붙여넣으세요.
+//      (ConfirmedTermEnds_AppsScript.gs 파일 참고) 비워두면 이 브라우저에만 저장됩니다(공유 안 됨).
+const CONFIRMED_API_URL = "https://script.google.com/macros/s/AKfycbwYxH57W502JJFyHo15dTLvJXP451Y7zzHmajCjPkI6NgoodZujQIZFag50DOpij7Ol/exec";
+
+const CONFIRMED_KEY = 'newcomerEduConfirmedTermEnds';
+const CONFIRMED_KEY_LEGACY = 'newcomerEduConfirmedTermEnd'; // 이전 버전(단일값) 마이그레이션용
+function loadConfirmedListLocal(){
+  const saved = JSON.parse(localStorage.getItem(CONFIRMED_KEY) || 'null');
+  if(saved) return saved;
+  const legacy = localStorage.getItem(CONFIRMED_KEY_LEGACY);
+  const initial = legacy ? [legacy] : ["2026-08-20"];
+  localStorage.setItem(CONFIRMED_KEY, JSON.stringify(initial));
+  localStorage.removeItem(CONFIRMED_KEY_LEGACY);
+  return initial;
+}
+let CONFIRMED_TERM_ENDS = CONFIRMED_API_URL ? [] : loadConfirmedListLocal();
+let PLANNED_TERM_END = null;
+
+// JSONP 요청 헬퍼 — file:// 로컬 HTML에서는 fetch로 외부(구글 Apps Script) API를
+// 부를 때 CORS에 막히므로, <script> 태그로 불러오는 JSONP 방식을 씀.
+function jsonpRequest(url){
+  return new Promise((resolve, reject) => {
+    const cbName = '__jsonp_' + Date.now() + '_' + Math.floor(Math.random()*1e6);
+    const script = document.createElement('script');
+    const cleanup = () => { delete window[cbName]; script.remove(); };
+    window[cbName] = (data) => { cleanup(); resolve(data); };
+    script.onerror = () => { cleanup(); reject(new Error('요청 실패(네트워크/URL 확인)')); };
+    script.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cbName;
+    document.body.appendChild(script);
+  });
+}
+
+// 확정 종강일 추가/삭제(쓰기)에 필요한 비밀번호 — 최초 1회만 물어보고,
+// 이후엔 이 브라우저에 저장해뒀다가 자동으로 같이 보냄. 서버가 비밀번호를 거부하면 다시 물어봄.
+const WRITE_TOKEN_KEY = 'newcomerEduWriteToken';
+function getWriteToken(promptIfMissing){
+  let token = localStorage.getItem(WRITE_TOKEN_KEY);
+  if(!token && promptIfMissing){
+    token = window.prompt('확정 종강일을 추가/삭제하려면 비밀번호를 입력하세요:') || '';
+    if(token) localStorage.setItem(WRITE_TOKEN_KEY, token);
+  }
+  return token || '';
+}
+
+// 신년도 표기 오프셋(신 N년 = 서기 - SINYEAR_OFFSET) 및 개강반 표기까지의 개월 수
+const SINYEAR_OFFSET = 1983;
+const CLASS_DURATION_MONTHS = 8; // 화면에 표시된 달 기준, 몇 개월 전이 개강월인지
+
+// 3) 카테고리별 색상 / 아이콘
+const CATEGORIES = {
+  "주일예배":   "#3b6ef6",
+  "새신자교육": "#22a06b",
+  "종강일":     "#e0523f",
+};
+const CATEGORY_ICONS = {
+  "주일예배":   "🙏",
+  "새신자교육": "📖",
+  "종강일":     "🎓",
+};
+const shadeColor = (hex, percent) => {
+  const num = parseInt(hex.slice(1), 16);
+  const amt = Math.round(2.55 * percent);
+  const clamp = v => Math.max(Math.min(255, v), 0);
+  const r = clamp((num >> 16) + amt), g = clamp(((num >> 8) & 0xff) + amt), b = clamp((num & 0xff) + amt);
+  return `#${(0x1000000 + r*0x10000 + g*0x100 + b).toString(16).slice(1)}`;
+};
+const hexToRgba = (hex, alpha) => {
+  const num = parseInt(hex.slice(1), 16);
+  return `rgba(${(num>>16)&0xff},${(num>>8)&0xff},${num&0xff},${alpha})`;
+};
+
+/* ── 자동 계산 로직 ──
+   - 종강일 기준으로 역산해 직전 4번의 일요일을 주일예배 1~4회차로 표시
+     (종강일과 같은 주, 혹은 그 이전의 가장 가까운 일요일이 4회차)
+   - 새신자교육은 종강일 "다음" 일요일부터 시작해 일→월→수→목 순으로
+     매주 반복, 총 8회 (2주간 진행)                                     */
+const parseLocalDate = s => { const [y,m,d] = s.split('-').map(Number); return new Date(y, m-1, d); };
+const fmtDateLocal = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const addDays = (d, n) => { const r = new Date(d); r.setDate(r.getDate()+n); return r; };
+
+// 4) 공휴일 목록 (2026~2027년) — 해당 날짜는 주일예배/새신자교육 회차 계산에서 건너뛰고, 달력에는 이름만 작게 표시됩니다.
+//    2028년 이후 종강일을 다루게 되면 이 목록에 그 해 공휴일을 추가해주세요.
+const HOLIDAYS = [
+  { date: "2026-01-01", name: "신정" },
+  { date: "2026-02-16", name: "설날연휴" },
+  { date: "2026-02-17", name: "설날" },
+  { date: "2026-02-18", name: "설날연휴" },
+  { date: "2026-03-01", name: "삼일절" },
+  { date: "2026-03-02", name: "대체공휴일" },
+  { date: "2026-05-01", name: "노동절" },
+  { date: "2026-05-05", name: "어린이날" },
+  { date: "2026-05-24", name: "부처님오신날" },
+  { date: "2026-05-25", name: "대체공휴일" },
+  { date: "2026-06-03", name: "지방선거일" },
+  { date: "2026-06-06", name: "현충일" },
+  { date: "2026-07-17", name: "제헌절" },
+  { date: "2026-08-15", name: "광복절" },
+  { date: "2026-08-17", name: "대체공휴일" },
+  { date: "2026-09-24", name: "추석연휴" },
+  { date: "2026-09-25", name: "추석" },
+  { date: "2026-09-26", name: "추석연휴" },
+  { date: "2026-10-03", name: "개천절" },
+  { date: "2026-10-09", name: "한글날" },
+  { date: "2026-12-25", name: "크리스마스" },
+
+  { date: "2027-01-01", name: "신정" },
+  { date: "2027-02-06", name: "설날연휴" },
+  { date: "2027-02-07", name: "설날" },
+  { date: "2027-02-08", name: "설날연휴" },
+  { date: "2027-02-09", name: "대체공휴일" },
+  { date: "2027-03-01", name: "삼일절" },
+  { date: "2027-05-01", name: "근로자의날" },
+  { date: "2027-05-05", name: "어린이날" },
+  { date: "2027-05-13", name: "부처님오신날" },
+  { date: "2027-06-06", name: "현충일" },
+  { date: "2027-07-17", name: "제헌절" },
+  { date: "2027-08-15", name: "광복절" },
+  { date: "2027-08-16", name: "대체공휴일" },
+  { date: "2027-09-14", name: "추석연휴" },
+  { date: "2027-09-15", name: "추석" },
+  { date: "2027-09-16", name: "추석연휴" },
+  { date: "2027-10-03", name: "개천절" },
+  { date: "2027-10-04", name: "대체공휴일" },
+  { date: "2027-10-09", name: "한글날" },
+  { date: "2027-10-11", name: "대체공휴일" },
+  { date: "2027-12-25", name: "크리스마스" },
+  { date: "2027-12-27", name: "대체공휴일" },
+];
+const findHoliday = dateStr => HOLIDAYS.find(h => h.date === dateStr);
+
+function computeEvents(termEndStr, tentative){
+  const termEndDate = parseLocalDate(termEndStr);
+  const events = [];
+
+  // 종강일이 속한 주의 일요일 (종강일 당일 포함, 그 이전 가장 가까운 일요일) — 주일예배 계산용
+  const worshipWeekSunday = addDays(termEndDate, -termEndDate.getDay());
+
+  // 종강일 다음 일요일 (종강일 당일 이후 가장 가까운 일요일) — 새신자교육 시작일
+  const eduStartSunday = addDays(termEndDate, ((7 - termEndDate.getDay()) % 7) || 7);
+
+  // 주일예배 1~4회차: worshipWeekSunday에서부터 거꾸로 가며 공휴일인 일요일은 건너뛰고 4번 채움
+  const worshipDates = [];
+  let worshipCandidate = worshipWeekSunday;
+  while(worshipDates.length < 4){
+    if(!findHoliday(fmtDateLocal(worshipCandidate))) worshipDates.push(worshipCandidate);
+    worshipCandidate = addDays(worshipCandidate, -7);
+  }
+  worshipDates.reverse().forEach((d, idx) => {
+    events.push({ date: fmtDateLocal(d), category: "주일예배", round: idx+1, tentative });
+  });
+
+  // 새신자교육 8회 (일,월,수,목 반복), eduStartSunday부터 시작해 공휴일은 건너뛰고 8번 채움
+  const eduWeekdayOffsets = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4) — eduStartSunday 기준 오프셋
+  const eduDates = [];
+  let week = 0;
+  while(eduDates.length < 8){
+    for(const offset of eduWeekdayOffsets){
+      if(eduDates.length >= 8) break;
+      const d = addDays(eduStartSunday, week*7 + offset);
+      if(!findHoliday(fmtDateLocal(d))) eduDates.push(d);
+    }
+    week++;
+  }
+  eduDates.forEach((d, idx) => {
+    events.push({ date: fmtDateLocal(d), category: "새신자교육", round: idx+1, tentative });
+  });
+
+  // 종강일
+  events.push({ date: termEndStr, category: "종강일", round: null, tentative });
+
+  return events;
+}
+
+let EVENTS = [];
+function recomputeEvents(){
+  EVENTS = CONFIRMED_TERM_ENDS.flatMap(d => computeEvents(d, false));
+  if(PLANNED_TERM_END) EVENTS = EVENTS.concat(computeEvents(PLANNED_TERM_END, true));
+}
+recomputeEvents();
+
+/* ══════════════════════════════════════════════
+   아래는 렌더링 로직 (수정 불필요)
+   ══════════════════════════════════════════════ */
+
+// 월별로 조금씩 다른 톤/파티클 — 같은 계절 안에서도 초/한/늦 느낌이 다르게
+const MONTHS = {
+  1:  { season:"winter", emoji:"❄️",  a:"#eef4fb", b:"#dde7f7", accent:"#3f5f8f", particles:["❄️"],                count:18 }, // 한겨울, 함박눈
+  2:  { season:"winter", emoji:"🌨️", a:"#f1f6fb", b:"#e7f2ec", accent:"#5a7aa8", particles:["❄️"],                count:8  }, // 늦겨울, 눈 잦아듦
+  3:  { season:"spring", emoji:"🌱",  a:"#f6fbf0", b:"#eaf7df", accent:"#7fae4f", particles:["🌼","🌱","🌼"],       count:10 }, // 초봄, 개나리 새싹
+  4:  { season:"spring", emoji:"🌸",  a:"#fff2f6", b:"#ffe6ee", accent:"#e0729a", particles:["🌸","🌸","🌸","🌼"],  count:18 }, // 벚꽃 절정
+  5:  { season:"spring", emoji:"🌿",  a:"#f2fbe9", b:"#e2f6dd", accent:"#5fae4a", particles:["🌿","🍃","🌸"],       count:11 }, // 신록
+  6:  { season:"summer", emoji:"🌤️", a:"#eafaf9", b:"#ddf3ee", accent:"#2bb3ad", particles:["🫧"],                count:6  }, // 초여름, 산들바람
+  7:  { season:"summer", emoji:"☀️",  a:"#e3f6ff", b:"#cdeef0", accent:"#0fa3b1", particles:["🫧"],                count:13 }, // 한여름, 파도 절정
+  8:  { season:"summer", emoji:"🌅",  a:"#fff6e2", b:"#ffe6cf", accent:"#e0863c", particles:["🫧"],                count:8  }, // 늦여름, 노을
+  9:  { season:"fall",   emoji:"🌾",  a:"#fff8e8", b:"#fdecc8", accent:"#c9932f", particles:["🍂","🌾"],           count:9  }, // 초가을, 황금들녘
+  10: { season:"fall",   emoji:"🍁",  a:"#fff1df", b:"#fdd9bd", accent:"#d9622b", particles:["🍁","🍂"],           count:18 }, // 단풍 절정
+  11: { season:"fall",   emoji:"🍂",  a:"#f7f0ea", b:"#ecdfd2", accent:"#8a6a52", particles:["🍂"],                count:8  }, // 늦가을, 낙엽 잦아듦
+  12: { season:"winter", emoji:"❄️",  a:"#eef2fa", b:"#e4eaf9", accent:"#5a76ab", particles:["❄️"],                count:11 }, // 초겨울, 첫눈
+};
+
+let lastMonthKey = null;
+function buildDecor(cfg){
+  const decor = document.getElementById('decor');
+  decor.innerHTML = '';
+  document.getElementById('waveWrap').style.display = (cfg.season === 'summer') ? 'block' : 'none';
+
+  const isRising = cfg.season === 'summer';
+  const emojis = cfg.particles;
+  const count = cfg.count;
+
+  for(let i=0;i<count;i++){
+    const el = document.createElement('span');
+    el.className = 'particle ' + (isRising ? 'rise-particle' : 'fall-particle');
+    el.textContent = emojis[Math.floor(Math.random()*emojis.length)];
+    el.style.left = `${Math.random()*100}%`;
+    el.style.fontSize = `${14 + Math.random()*16}px`;
+    el.style.animationDuration = `${(isRising ? 6 : 9) + Math.random()*8}s`;
+    el.style.animationDelay = `${-Math.random()*16}s`;
+    el.style.setProperty('--drift', `${Math.random()*80-40}px`);
+    decor.appendChild(el);
+  }
+}
+
+function render(){
+  document.getElementById('title').textContent = `${YEAR}년 ${MONTH}월`;
+
+  const classStart = new Date(YEAR, MONTH-1 - CLASS_DURATION_MONTHS, 1);
+  const classStartYear = classStart.getFullYear();
+  const classStartMonth = classStart.getMonth() + 1;
+  document.getElementById('termLabel').textContent =
+    `신 ${classStartYear - SINYEAR_OFFSET}(${classStartYear})년 ${classStartMonth}월 개강반`;
+
+  const cfg = MONTHS[MONTH];
+  document.documentElement.setAttribute('data-season', cfg.season);
+  document.documentElement.style.setProperty('--season-a', cfg.a);
+  document.documentElement.style.setProperty('--season-b', cfg.b);
+  document.documentElement.style.setProperty('--season-accent', cfg.accent);
+  document.getElementById('seasonBadge').textContent = cfg.emoji;
+  if(MONTH !== lastMonthKey){
+    buildDecor(cfg);
+    lastMonthKey = MONTH;
+  }
+
+  const legend = document.getElementById('legend');
+  legend.innerHTML = Object.entries(CATEGORIES).map(([name,color]) =>
+    `<div class="legend-item"><span class="legend-dot" style="background:${color}"></span>${name}</div>`
+  ).join('');
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  const firstDay = new Date(YEAR, MONTH-1, 1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(YEAR, MONTH, 0).getDate();
+  const daysInPrevMonth = new Date(YEAR, MONTH-1, 0).getDate();
+
+  const todayStr = fmtDateLocal(new Date());
+  const categoryOrder = Object.keys(CATEGORIES);
+
+  const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
+  grid.style.gridTemplateRows = `repeat(${totalCells/7}, 1fr)`;
+
+  for(let i=0;i<totalCells;i++){
+    const dayOffset = i - startWeekday + 1;
+    let cellDate, otherMonth = false;
+
+    if(dayOffset < 1){
+      cellDate = new Date(YEAR, MONTH-2, daysInPrevMonth + dayOffset);
+      otherMonth = true;
+    } else if(dayOffset > daysInMonth){
+      cellDate = new Date(YEAR, MONTH, dayOffset - daysInMonth);
+      otherMonth = true;
+    } else {
+      cellDate = new Date(YEAR, MONTH-1, dayOffset);
+    }
+
+    const dateStr = fmtDateLocal(cellDate);
+    const weekday = cellDate.getDay();
+
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (otherMonth ? ' other-month' : '')
+      + (weekday===0 ? ' sunday' : '') + (weekday===6 ? ' saturday' : '')
+      + (dateStr===todayStr ? ' today' : '');
+
+    const dateRow = document.createElement('div');
+    dateRow.className = 'date-row';
+
+    const num = document.createElement('div');
+    num.className = 'date-num';
+    num.textContent = cellDate.getDate();
+    dateRow.appendChild(num);
+
+    const holiday = findHoliday(dateStr);
+    if(holiday){
+      const hLabel = document.createElement('div');
+      hLabel.className = 'holiday-label';
+      hLabel.textContent = holiday.name;
+      hLabel.title = holiday.name;
+      dateRow.appendChild(hLabel);
+    }
+    cell.appendChild(dateRow);
+
+    const evWrap = document.createElement('div');
+    evWrap.className = 'events';
+    const dayEvents = EVENTS
+      .filter(e => e.date === dateStr)
+      .sort((a,b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category));
+
+    dayEvents.forEach(e => {
+      const base = CATEGORIES[e.category] || '#888';
+      const el = document.createElement('div');
+      el.className = e.tentative ? 'event tentative' : 'event';
+      if(e.tentative){
+        el.style.background = hexToRgba(base, .14);
+        el.style.border = `2px dashed ${base}`;
+        el.style.color = base;
+        el.style.boxShadow = 'none';
+      } else {
+        el.style.background = `linear-gradient(150deg, ${shadeColor(base, 10)}, ${shadeColor(base, -16)})`;
+        el.style.boxShadow = `0 6px 14px ${hexToRgba(base, .38)}`;
+      }
+      el.title = (e.round ? `${e.category} ${e.round}회차` : e.category) + (e.tentative ? ' (예정)' : '');
+
+      if(e.tentative){
+        const badge = document.createElement('div');
+        badge.className = 'tentative-badge';
+        badge.textContent = '예정';
+        badge.style.background = hexToRgba(base, .18);
+        badge.style.border = `1px solid ${base}`;
+        badge.style.color = base;
+        el.appendChild(badge);
+      }
+
+      const icon = document.createElement('div');
+      icon.className = 'event-icon';
+      icon.textContent = CATEGORY_ICONS[e.category] || '';
+      el.appendChild(icon);
+
+      const cat = document.createElement('div');
+      cat.className = e.round ? 'event-cat' : 'event-cat event-solo';
+      cat.textContent = e.category;
+      el.appendChild(cat);
+
+      if(e.round){
+        const roundRow = document.createElement('div');
+        roundRow.className = 'event-round';
+        roundRow.innerHTML = `<span class="round-num">${e.round}</span><span class="round-unit">회차</span>`;
+        el.appendChild(roundRow);
+      }
+
+      evWrap.appendChild(el);
+    });
+    cell.appendChild(evWrap);
+
+    grid.appendChild(cell);
+  }
+}
+
+// 지금 화면에 보이는 달력을 PNG 이미지로 저장 (외부 라이브러리 없이,
+// 실제 DOM을 SVG foreignObject에 담아 캔버스로 그려서 다운로드)
+function exportImage(){
+  try{
+    const source = document.querySelector('.wrap');
+    const clone = source.cloneNode(true);
+    clone.querySelectorAll('.sidebar, .term-bar, .nav-btns').forEach(el => el.remove());
+    clone.style.maxWidth = 'none';
+    clone.style.width = '1100px';
+
+    const styleText = Array.from(document.querySelectorAll('style')).map(s => s.textContent).join('\n');
+    const rootStyle = getComputedStyle(document.documentElement);
+    const varNames = ['--bg','--card','--border','--text','--muted','--accent','--today','--sun','--sat','--season-a','--season-b','--season-accent'];
+    const varsCss = ':root{' + varNames.map(v => `${v}:${rootStyle.getPropertyValue(v).trim()};`).join('') + '}';
+
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-99999px;top:0;';
+    host.appendChild(clone);
+    document.body.appendChild(host);
+    const rect = clone.getBoundingClientRect();
+    const w = Math.ceil(rect.width) || 1000;
+    const h = Math.ceil(rect.height) || 600;
+    const innerHtml = clone.outerHTML;
+    document.body.removeChild(host);
+
+    const pad = 24;
+    const totalW = w + pad*2;
+    const totalH = h + pad*2;
+    const svgString =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="${totalH}">` +
+      `<foreignObject width="100%" height="100%">` +
+      `<div xmlns="http://www.w3.org/1999/xhtml" style="width:${totalW}px;height:${totalH}px;background:linear-gradient(160deg, var(--season-a), var(--season-b) 55%, var(--bg) 100%);padding:${pad}px;box-sizing:border-box;">` +
+      `<style>${varsCss}\n${styleText}</style>${innerHtml}` +
+      `</div></foreignObject></svg>`;
+
+    // blob: URL로 SVG를 로드하면 크롬에서 캔버스가 오염(tainted)되어 저장이
+    // 조용히 실패하는 경우가 있어, data URI로 직접 인코딩해서 우회한다.
+    const svgUrl = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgString);
+    const img = new Image();
+    img.onload = () => {
+      try{
+        const scale = 2;
+        const canvas = document.createElement('canvas');
+        canvas.width = totalW * scale;
+        canvas.height = totalH * scale;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0, totalW, totalH);
+
+        canvas.toBlob(blob => {
+          if(!blob){
+            alert('이미지 변환에 실패했습니다(빈 결과). 콘솔(F12)의 오류 메시지를 확인해주세요.');
+            return;
+          }
+          const link = document.createElement('a');
+          link.download = `새신자교육_학사일정_${YEAR}년${MONTH}월.png`;
+          link.href = URL.createObjectURL(blob);
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }, 'image/png');
+      }catch(err){
+        alert('이미지 저장 중 오류: ' + err.message + '\n콘솔(F12)에서 자세한 내용을 확인해주세요.');
+        console.error(err);
+      }
+    };
+    img.onerror = (err) => {
+      alert('달력 이미지를 그리는 데 실패했습니다. 콘솔(F12)의 오류 메시지를 확인해주세요.');
+      console.error('exportImage img load error', err);
+    };
+    img.src = svgUrl;
+  }catch(err){
+    alert('이미지 저장 준비 중 오류: ' + err.message + '\n콘솔(F12)에서 자세한 내용을 확인해주세요.');
+    console.error(err);
+  }
+}
+
+function changeMonth(delta){
+  MONTH += delta;
+  if(MONTH > 12){ MONTH = 1; YEAR++; }
+  if(MONTH < 1){ MONTH = 12; YEAR--; }
+  render();
+}
+
+function jumpToDate(dateStr){
+  const d = parseLocalDate(dateStr);
+  YEAR = d.getFullYear();
+  MONTH = d.getMonth() + 1;
+}
+
+const confirmedInput = document.getElementById('confirmedInput');
+const plannedInput = document.getElementById('plannedInput');
+plannedInput.value = PLANNED_TERM_END || '';
+
+function renderConfirmedList(){
+  const wrap = document.getElementById('confirmedList');
+  wrap.innerHTML = '';
+  CONFIRMED_TERM_ENDS.slice().sort().forEach(dateStr => {
+    const chip = document.createElement('span');
+    chip.className = 'confirmed-chip';
+    chip.textContent = dateStr + ' ';
+    const btn = document.createElement('button');
+    btn.textContent = '×';
+    btn.title = '이 확정 종강일 삭제';
+    btn.onclick = () => removeConfirmed(dateStr);
+    chip.appendChild(btn);
+    wrap.appendChild(chip);
+  });
+  const statusEl = document.getElementById('confirmedSyncStatus');
+  if(statusEl){
+    statusEl.textContent = CONFIRMED_API_URL ? '🔗 구글시트와 공유됨' : '💻 이 브라우저에만 저장됨(공유 안 됨)';
+  }
+}
+
+async function addConfirmed(){
+  const v = confirmedInput.value;
+  if(!v) return;
+  confirmedInput.value = '';
+  if(CONFIRMED_API_URL){
+    const token = getWriteToken(true);
+    try{
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=add&date=${encodeURIComponent(v)}&token=${encodeURIComponent(token)}`);
+      if(!res.ok){
+        localStorage.removeItem(WRITE_TOKEN_KEY);
+        alert('저장 실패: ' + res.error);
+        CONFIRMED_TERM_ENDS = res.dates || CONFIRMED_TERM_ENDS;
+        recomputeEvents();
+        renderConfirmedList();
+        render();
+        return;
+      }
+      CONFIRMED_TERM_ENDS = res.dates;
+    }catch(err){
+      alert('구글시트에 저장하지 못했습니다: ' + err.message);
+      return;
+    }
+  } else {
+    if(!CONFIRMED_TERM_ENDS.includes(v)){
+      CONFIRMED_TERM_ENDS.push(v);
+      localStorage.setItem(CONFIRMED_KEY, JSON.stringify(CONFIRMED_TERM_ENDS));
+    }
+  }
+  recomputeEvents();
+  jumpToDate(v);
+  renderConfirmedList();
+  render();
+}
+
+async function removeConfirmed(dateStr){
+  if(CONFIRMED_API_URL){
+    const token = getWriteToken(true);
+    try{
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=remove&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+      if(!res.ok){
+        localStorage.removeItem(WRITE_TOKEN_KEY);
+        alert('삭제 실패: ' + res.error);
+        CONFIRMED_TERM_ENDS = res.dates || CONFIRMED_TERM_ENDS;
+        recomputeEvents();
+        renderConfirmedList();
+        render();
+        return;
+      }
+      CONFIRMED_TERM_ENDS = res.dates;
+    }catch(err){
+      alert('구글시트에서 삭제하지 못했습니다: ' + err.message);
+      return;
+    }
+  } else {
+    CONFIRMED_TERM_ENDS = CONFIRMED_TERM_ENDS.filter(d => d !== dateStr);
+    localStorage.setItem(CONFIRMED_KEY, JSON.stringify(CONFIRMED_TERM_ENDS));
+  }
+  recomputeEvents();
+  renderConfirmedList();
+  render();
+}
+
+if(CONFIRMED_API_URL){
+  jsonpRequest(CONFIRMED_API_URL).then(res => {
+    CONFIRMED_TERM_ENDS = res.dates || [];
+    recomputeEvents();
+    renderConfirmedList();
+    render();
+  }).catch(err => {
+    alert('구글시트에서 확정 종강일을 불러오지 못했습니다: ' + err.message);
+  });
+} else {
+  renderConfirmedList();
+}
+
+plannedInput.addEventListener('change', () => {
+  PLANNED_TERM_END = plannedInput.value || null;
+  recomputeEvents();
+  if(PLANNED_TERM_END) jumpToDate(PLANNED_TERM_END);
+  render();
+});
+
+function clearPlanned(){
+  PLANNED_TERM_END = null;
+  plannedInput.value = '';
+  recomputeEvents();
+  render();
+}
+
+render();
+</script>
+</body>
+</html>
