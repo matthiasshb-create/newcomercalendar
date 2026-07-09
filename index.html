@@ -317,6 +317,26 @@
     padding:1px 6px;
     border-radius:6px;
   }
+  .event-exclude-btn{
+    position:absolute;
+    bottom:6px;
+    right:6px;
+    width:20px;
+    height:20px;
+    line-height:18px;
+    padding:0;
+    border:none;
+    border-radius:50%;
+    background:rgba(0,0,0,.28);
+    color:#fff;
+    font-size:13px;
+    font-weight:800;
+    cursor:pointer;
+    opacity:0;
+    transition:opacity 0.15s ease;
+  }
+  .event:hover .event-exclude-btn{ opacity:1; }
+  .event-exclude-btn:hover{ background:var(--sun); }
 
   .decor{
     position:fixed;
@@ -444,6 +464,11 @@
       <div class="confirmed-list" id="confirmedList"></div>
       <span class="confirmed-sync-status" id="confirmedSyncStatus"></span>
     </div>
+    <div class="term-picker confirmed-list-box">
+      <span class="confirmed-list-label">제외된 회차</span>
+      <div class="confirmed-list" id="excludedList"></div>
+      <span class="confirmed-sync-status">특이 일정으로 뺀 회차 목록 — ↺ 누르면 복원</span>
+    </div>
   </aside>
 </div>
 
@@ -477,6 +502,14 @@ function loadConfirmedListLocal(){
 }
 let CONFIRMED_TERM_ENDS = CONFIRMED_API_URL ? [] : loadConfirmedListLocal();
 let PLANNED_TERM_END = null;
+
+// 특이 일정 등으로 특정 회차를 통째로 빼야 할 때(예: 8회 중 3회차만 취소) 사용 —
+// 제외된 날짜는 계산에서 빠지고, 그 뒤 회차들은 번호가 당겨짐(4회차→3회차 식)
+const EXCLUDED_KEY = 'newcomerEduExcludedDates';
+function loadExcludedListLocal(){
+  return JSON.parse(localStorage.getItem(EXCLUDED_KEY) || '[]');
+}
+let EXCLUDED_DATES = CONFIRMED_API_URL ? [] : loadExcludedListLocal();
 
 // JSONP 요청 헬퍼 — file:// 로컬 HTML에서는 fetch로 외부(구글 Apps Script) API를
 // 부를 때 CORS에 막히므로, <script> 태그로 불러오는 JSONP 방식을 씀.
@@ -609,9 +642,11 @@ function computeEvents(termEndStr, tentative){
     if(!findHoliday(fmtDateLocal(worshipCandidate))) worshipDates.push(worshipCandidate);
     worshipCandidate = addDays(worshipCandidate, -7);
   }
-  worshipDates.reverse().forEach((d, idx) => {
-    events.push({ date: fmtDateLocal(d), category: "주일예배", round: idx+1, tentative });
-  });
+  worshipDates.reverse()
+    .filter(d => !EXCLUDED_DATES.includes(fmtDateLocal(d)))
+    .forEach((d, idx) => {
+      events.push({ date: fmtDateLocal(d), category: "주일예배", round: idx+1, tentative });
+    });
 
   // 새신자교육 8회 (일,월,수,목 반복), eduStartSunday부터 시작해 공휴일은 건너뛰고 8번 채움
   const eduWeekdayOffsets = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4) — eduStartSunday 기준 오프셋
@@ -625,9 +660,11 @@ function computeEvents(termEndStr, tentative){
     }
     week++;
   }
-  eduDates.forEach((d, idx) => {
-    events.push({ date: fmtDateLocal(d), category: "새신자교육", round: idx+1, tentative });
-  });
+  eduDates
+    .filter(d => !EXCLUDED_DATES.includes(fmtDateLocal(d)))
+    .forEach((d, idx) => {
+      events.push({ date: fmtDateLocal(d), category: "새신자교육", round: idx+1, tentative });
+    });
 
   // 종강일
   events.push({ date: termEndStr, category: "종강일", round: null, tentative });
@@ -813,6 +850,13 @@ function render(){
         roundRow.className = 'event-round';
         roundRow.innerHTML = `<span class="round-num">${e.round}</span><span class="round-unit">회차</span>`;
         el.appendChild(roundRow);
+
+        const excludeBtn = document.createElement('button');
+        excludeBtn.className = 'event-exclude-btn';
+        excludeBtn.textContent = '×';
+        excludeBtn.title = '이 회차를 특이 일정으로 빼기';
+        excludeBtn.onclick = (evt) => { evt.stopPropagation(); excludeEvent(e.date, `${e.category} ${e.round}회차`); };
+        el.appendChild(excludeBtn);
       }
 
       evWrap.appendChild(el);
@@ -937,6 +981,74 @@ function renderConfirmedList(){
   }
 }
 
+function renderExcludedList(){
+  const wrap = document.getElementById('excludedList');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  EXCLUDED_DATES.slice().sort().forEach(dateStr => {
+    const chip = document.createElement('span');
+    chip.className = 'confirmed-chip';
+    chip.textContent = dateStr + ' ';
+    const btn = document.createElement('button');
+    btn.textContent = '↺';
+    btn.title = '이 회차 제외 취소(복원)';
+    btn.onclick = () => unexcludeEvent(dateStr);
+    chip.appendChild(btn);
+    wrap.appendChild(chip);
+  });
+}
+
+async function excludeEvent(dateStr, label){
+  if(!confirm(`${label}(${dateStr})을 이번 기수에서 빼시겠어요?\n이후 회차 번호가 하나씩 당겨집니다.`)) return;
+  if(CONFIRMED_API_URL){
+    const token = getWriteToken(true);
+    try{
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=exclude&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+      if(!res.ok){
+        localStorage.removeItem(WRITE_TOKEN_KEY);
+        alert('처리 실패: ' + res.error);
+        return;
+      }
+      EXCLUDED_DATES = res.excluded || [];
+    }catch(err){
+      alert('구글시트에 반영하지 못했습니다: ' + err.message);
+      return;
+    }
+  } else {
+    if(!EXCLUDED_DATES.includes(dateStr)){
+      EXCLUDED_DATES.push(dateStr);
+      localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
+    }
+  }
+  recomputeEvents();
+  renderExcludedList();
+  render();
+}
+
+async function unexcludeEvent(dateStr){
+  if(CONFIRMED_API_URL){
+    const token = getWriteToken(true);
+    try{
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=unexclude&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+      if(!res.ok){
+        localStorage.removeItem(WRITE_TOKEN_KEY);
+        alert('처리 실패: ' + res.error);
+        return;
+      }
+      EXCLUDED_DATES = res.excluded || [];
+    }catch(err){
+      alert('구글시트에 반영하지 못했습니다: ' + err.message);
+      return;
+    }
+  } else {
+    EXCLUDED_DATES = EXCLUDED_DATES.filter(d => d !== dateStr);
+    localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
+  }
+  recomputeEvents();
+  renderExcludedList();
+  render();
+}
+
 async function addConfirmed(){
   const v = confirmedInput.value;
   if(!v) return;
@@ -949,12 +1061,15 @@ async function addConfirmed(){
         localStorage.removeItem(WRITE_TOKEN_KEY);
         alert('저장 실패: ' + res.error);
         CONFIRMED_TERM_ENDS = res.dates || CONFIRMED_TERM_ENDS;
+        EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
         recomputeEvents();
         renderConfirmedList();
+        renderExcludedList();
         render();
         return;
       }
       CONFIRMED_TERM_ENDS = res.dates;
+      EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
     }catch(err){
       alert('구글시트에 저장하지 못했습니다: ' + err.message);
       return;
@@ -968,6 +1083,7 @@ async function addConfirmed(){
   recomputeEvents();
   jumpToDate(v);
   renderConfirmedList();
+  renderExcludedList();
   render();
 }
 
@@ -980,12 +1096,15 @@ async function removeConfirmed(dateStr){
         localStorage.removeItem(WRITE_TOKEN_KEY);
         alert('삭제 실패: ' + res.error);
         CONFIRMED_TERM_ENDS = res.dates || CONFIRMED_TERM_ENDS;
+        EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
         recomputeEvents();
         renderConfirmedList();
+        renderExcludedList();
         render();
         return;
       }
       CONFIRMED_TERM_ENDS = res.dates;
+      EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
     }catch(err){
       alert('구글시트에서 삭제하지 못했습니다: ' + err.message);
       return;
@@ -996,20 +1115,24 @@ async function removeConfirmed(dateStr){
   }
   recomputeEvents();
   renderConfirmedList();
+  renderExcludedList();
   render();
 }
 
 if(CONFIRMED_API_URL){
   jsonpRequest(CONFIRMED_API_URL).then(res => {
     CONFIRMED_TERM_ENDS = res.dates || [];
+    EXCLUDED_DATES = res.excluded || [];
     recomputeEvents();
     renderConfirmedList();
+    renderExcludedList();
     render();
   }).catch(err => {
     alert('구글시트에서 확정 종강일을 불러오지 못했습니다: ' + err.message);
   });
 } else {
   renderConfirmedList();
+  renderExcludedList();
 }
 
 plannedInput.addEventListener('change', () => {
