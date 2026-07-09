@@ -482,11 +482,6 @@
       <span class="confirmed-sync-status" id="confirmedSyncStatus"></span>
     </div>
     <div class="term-picker confirmed-list-box">
-      <span class="confirmed-list-label">제외된 회차</span>
-      <div class="confirmed-list" id="excludedList"></div>
-      <span class="confirmed-sync-status">특이 일정으로 뺀 회차 목록(참고용) — 복원하려면 "회차 추가"에서 같은 날짜를 다시 추가하면 됨</span>
-    </div>
-    <div class="term-picker confirmed-list-box">
       <span class="confirmed-list-label">회차 추가</span>
       <div class="add-extra-row">
         <select id="addExtraCategory">
@@ -497,7 +492,7 @@
         <button class="term-add" onclick="addExtraEvent()">추가</button>
       </div>
       <div class="confirmed-list" id="addedList"></div>
-      <span class="confirmed-sync-status">예: 화요일 회차가 월요일로 당겨진 경우 등 — 추가된 날짜는 기존 회차와 날짜순으로 합쳐져 다시 번호가 매겨짐</span>
+      <span class="confirmed-sync-status">예: 화요일 회차가 월요일로 당겨진 경우 등 — 추가된 날짜는 기존 회차와 날짜순으로 합쳐져 다시 번호가 매겨짐. 회차를 뺀 뒤 복원하고 싶을 때도 여기서 같은 날짜를 다시 추가하면 됨</span>
     </div>
   </aside>
 </div>
@@ -1022,19 +1017,6 @@ function renderConfirmedList(){
   }
 }
 
-function renderExcludedList(){
-  const wrap = document.getElementById('excludedList');
-  if(!wrap) return;
-  wrap.innerHTML = '';
-  // 복원 버튼은 따로 없음 — "회차 추가"에서 같은 날짜를 다시 추가하면 자동으로 제외 목록에서도 빠짐
-  EXCLUDED_DATES.slice().sort().forEach(dateStr => {
-    const chip = document.createElement('span');
-    chip.className = 'confirmed-chip';
-    chip.textContent = dateStr;
-    wrap.appendChild(chip);
-  });
-}
-
 function renderAddedList(){
   const wrap = document.getElementById('addedList');
   if(!wrap) return;
@@ -1075,7 +1057,6 @@ async function excludeEvent(dateStr, label){
     }
   }
   recomputeEvents();
-  renderExcludedList();
   render();
 }
 
@@ -1114,7 +1095,6 @@ async function addExtraEvent(){
   recomputeEvents();
   jumpToDate(v);
   renderAddedList();
-  renderExcludedList();
   render();
 }
 
@@ -1158,7 +1138,6 @@ async function addConfirmed(){
         ADDED_DATES = res.added || ADDED_DATES;
         recomputeEvents();
         renderConfirmedList();
-        renderExcludedList();
         renderAddedList();
         render();
         return;
@@ -1179,7 +1158,6 @@ async function addConfirmed(){
   recomputeEvents();
   jumpToDate(v);
   renderConfirmedList();
-  renderExcludedList();
   renderAddedList();
   render();
 }
@@ -1197,7 +1175,6 @@ async function removeConfirmed(dateStr){
         ADDED_DATES = res.added || ADDED_DATES;
         recomputeEvents();
         renderConfirmedList();
-        renderExcludedList();
         renderAddedList();
         render();
         return;
@@ -1215,7 +1192,6 @@ async function removeConfirmed(dateStr){
   }
   recomputeEvents();
   renderConfirmedList();
-  renderExcludedList();
   renderAddedList();
   render();
 }
@@ -1227,7 +1203,6 @@ if(CONFIRMED_API_URL){
     ADDED_DATES = res.added || [];
     recomputeEvents();
     renderConfirmedList();
-    renderExcludedList();
     renderAddedList();
     render();
   }).catch(err => {
@@ -1235,7 +1210,6 @@ if(CONFIRMED_API_URL){
   });
 } else {
   renderConfirmedList();
-  renderExcludedList();
   renderAddedList();
 }
 
