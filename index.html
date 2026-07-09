@@ -127,6 +127,23 @@
     font-size:11px;
     color:var(--muted);
   }
+  .add-extra-row{
+    display:flex;
+    gap:6px;
+    align-items:center;
+    flex-wrap:wrap;
+    width:100%;
+  }
+  .add-extra-row select,
+  .add-extra-row input[type="date"]{
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:6px 8px;
+    font-size:13px;
+    font-family:inherit;
+    color:var(--text);
+    background:var(--card);
+  }
   .term-add{
     border:none;
     background:var(--season-accent);
@@ -469,6 +486,19 @@
       <div class="confirmed-list" id="excludedList"></div>
       <span class="confirmed-sync-status">특이 일정으로 뺀 회차 목록 — ↺ 누르면 복원</span>
     </div>
+    <div class="term-picker confirmed-list-box">
+      <span class="confirmed-list-label">회차 추가</span>
+      <div class="add-extra-row">
+        <select id="addExtraCategory">
+          <option value="주일예배">주일예배</option>
+          <option value="새신자교육" selected>새신자교육</option>
+        </select>
+        <input type="date" id="addExtraInput">
+        <button class="term-add" onclick="addExtraEvent()">추가</button>
+      </div>
+      <div class="confirmed-list" id="addedList"></div>
+      <span class="confirmed-sync-status">예: 화요일 회차가 월요일로 당겨진 경우 등 — 추가된 날짜는 기존 회차와 날짜순으로 합쳐져 다시 번호가 매겨짐</span>
+    </div>
   </aside>
 </div>
 
@@ -510,6 +540,14 @@ function loadExcludedListLocal(){
   return JSON.parse(localStorage.getItem(EXCLUDED_KEY) || '[]');
 }
 let EXCLUDED_DATES = CONFIRMED_API_URL ? [] : loadExcludedListLocal();
+
+// 반대로 "화요일 회차가 월요일로 당겨졌다" 같은 특이 일정으로, 자동 계산에 없는
+// 날짜를 회차로 끼워넣어야 할 때 사용. { date, category } 쌍의 목록.
+const ADDED_KEY = 'newcomerEduAddedDates';
+function loadAddedListLocal(){
+  return JSON.parse(localStorage.getItem(ADDED_KEY) || '[]');
+}
+let ADDED_DATES = CONFIRMED_API_URL ? [] : loadAddedListLocal();
 
 // JSONP 요청 헬퍼 — file:// 로컬 HTML에서는 fetch로 외부(구글 Apps Script) API를
 // 부를 때 CORS에 막히므로, <script> 태그로 불러오는 JSONP 방식을 씀.
@@ -625,6 +663,17 @@ const HOLIDAYS = [
 ];
 const findHoliday = dateStr => HOLIDAYS.find(h => h.date === dateStr);
 
+// 자동 계산된 날짜(rawDateStrs)에서 제외된 날짜는 빼고, 수동으로 추가된(ADDED_DATES) 같은
+// 카테고리의 날짜는 끼워넣은 뒤, 날짜순으로 정렬해서 1회차부터 다시 번호를 매겨 events에 추가.
+function pushRoundedEvents_(events, rawDateStrs, category, tentative){
+  const kept = rawDateStrs.filter(ds => !EXCLUDED_DATES.includes(ds));
+  const added = ADDED_DATES.filter(a => a.category === category).map(a => a.date);
+  const merged = Array.from(new Set([...kept, ...added])).sort();
+  merged.forEach((ds, idx) => {
+    events.push({ date: ds, category, round: idx+1, tentative });
+  });
+}
+
 function computeEvents(termEndStr, tentative){
   const termEndDate = parseLocalDate(termEndStr);
   const events = [];
@@ -642,11 +691,7 @@ function computeEvents(termEndStr, tentative){
     if(!findHoliday(fmtDateLocal(worshipCandidate))) worshipDates.push(worshipCandidate);
     worshipCandidate = addDays(worshipCandidate, -7);
   }
-  worshipDates.reverse()
-    .filter(d => !EXCLUDED_DATES.includes(fmtDateLocal(d)))
-    .forEach((d, idx) => {
-      events.push({ date: fmtDateLocal(d), category: "주일예배", round: idx+1, tentative });
-    });
+  pushRoundedEvents_(events, worshipDates.reverse().map(fmtDateLocal), "주일예배", tentative);
 
   // 새신자교육 8회 (일,월,수,목 반복), eduStartSunday부터 시작해 공휴일은 건너뛰고 8번 채움
   const eduWeekdayOffsets = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4) — eduStartSunday 기준 오프셋
@@ -660,11 +705,7 @@ function computeEvents(termEndStr, tentative){
     }
     week++;
   }
-  eduDates
-    .filter(d => !EXCLUDED_DATES.includes(fmtDateLocal(d)))
-    .forEach((d, idx) => {
-      events.push({ date: fmtDateLocal(d), category: "새신자교육", round: idx+1, tentative });
-    });
+  pushRoundedEvents_(events, eduDates.map(fmtDateLocal), "새신자교육", tentative);
 
   // 종강일
   events.push({ date: termEndStr, category: "종강일", round: null, tentative });
@@ -998,6 +1039,23 @@ function renderExcludedList(){
   });
 }
 
+function renderAddedList(){
+  const wrap = document.getElementById('addedList');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  ADDED_DATES.slice().sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0).forEach(item => {
+    const chip = document.createElement('span');
+    chip.className = 'confirmed-chip';
+    chip.textContent = `${item.date} (${item.category}) `;
+    const btn = document.createElement('button');
+    btn.textContent = '×';
+    btn.title = '이 추가 회차 삭제';
+    btn.onclick = () => removeExtraEvent(item.date);
+    chip.appendChild(btn);
+    wrap.appendChild(chip);
+  });
+}
+
 async function excludeEvent(dateStr, label){
   if(!confirm(`${label}(${dateStr})을 이번 기수에서 빼시겠어요?\n이후 회차 번호가 하나씩 당겨집니다.`)) return;
   if(CONFIRMED_API_URL){
@@ -1049,6 +1107,62 @@ async function unexcludeEvent(dateStr){
   render();
 }
 
+async function addExtraEvent(){
+  const category = document.getElementById('addExtraCategory').value;
+  const dateInput = document.getElementById('addExtraInput');
+  const v = dateInput.value;
+  if(!v) return;
+  dateInput.value = '';
+  if(CONFIRMED_API_URL){
+    const token = getWriteToken(true);
+    try{
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=addExtra&date=${encodeURIComponent(v)}&category=${encodeURIComponent(category)}&token=${encodeURIComponent(token)}`);
+      if(!res.ok){
+        localStorage.removeItem(WRITE_TOKEN_KEY);
+        alert('저장 실패: ' + res.error);
+        return;
+      }
+      ADDED_DATES = res.added || [];
+    }catch(err){
+      alert('구글시트에 저장하지 못했습니다: ' + err.message);
+      return;
+    }
+  } else {
+    if(!ADDED_DATES.some(a => a.date === v)){
+      ADDED_DATES.push({ date: v, category });
+      localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
+    }
+  }
+  recomputeEvents();
+  jumpToDate(v);
+  renderAddedList();
+  render();
+}
+
+async function removeExtraEvent(dateStr){
+  if(CONFIRMED_API_URL){
+    const token = getWriteToken(true);
+    try{
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=removeExtra&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+      if(!res.ok){
+        localStorage.removeItem(WRITE_TOKEN_KEY);
+        alert('삭제 실패: ' + res.error);
+        return;
+      }
+      ADDED_DATES = res.added || [];
+    }catch(err){
+      alert('구글시트에서 삭제하지 못했습니다: ' + err.message);
+      return;
+    }
+  } else {
+    ADDED_DATES = ADDED_DATES.filter(a => a.date !== dateStr);
+    localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
+  }
+  recomputeEvents();
+  renderAddedList();
+  render();
+}
+
 async function addConfirmed(){
   const v = confirmedInput.value;
   if(!v) return;
@@ -1062,14 +1176,17 @@ async function addConfirmed(){
         alert('저장 실패: ' + res.error);
         CONFIRMED_TERM_ENDS = res.dates || CONFIRMED_TERM_ENDS;
         EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
+        ADDED_DATES = res.added || ADDED_DATES;
         recomputeEvents();
         renderConfirmedList();
         renderExcludedList();
+        renderAddedList();
         render();
         return;
       }
       CONFIRMED_TERM_ENDS = res.dates;
       EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
+      ADDED_DATES = res.added || ADDED_DATES;
     }catch(err){
       alert('구글시트에 저장하지 못했습니다: ' + err.message);
       return;
@@ -1084,6 +1201,7 @@ async function addConfirmed(){
   jumpToDate(v);
   renderConfirmedList();
   renderExcludedList();
+  renderAddedList();
   render();
 }
 
@@ -1097,14 +1215,17 @@ async function removeConfirmed(dateStr){
         alert('삭제 실패: ' + res.error);
         CONFIRMED_TERM_ENDS = res.dates || CONFIRMED_TERM_ENDS;
         EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
+        ADDED_DATES = res.added || ADDED_DATES;
         recomputeEvents();
         renderConfirmedList();
         renderExcludedList();
+        renderAddedList();
         render();
         return;
       }
       CONFIRMED_TERM_ENDS = res.dates;
       EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
+      ADDED_DATES = res.added || ADDED_DATES;
     }catch(err){
       alert('구글시트에서 삭제하지 못했습니다: ' + err.message);
       return;
@@ -1116,6 +1237,7 @@ async function removeConfirmed(dateStr){
   recomputeEvents();
   renderConfirmedList();
   renderExcludedList();
+  renderAddedList();
   render();
 }
 
@@ -1123,9 +1245,11 @@ if(CONFIRMED_API_URL){
   jsonpRequest(CONFIRMED_API_URL).then(res => {
     CONFIRMED_TERM_ENDS = res.dates || [];
     EXCLUDED_DATES = res.excluded || [];
+    ADDED_DATES = res.added || [];
     recomputeEvents();
     renderConfirmedList();
     renderExcludedList();
+    renderAddedList();
     render();
   }).catch(err => {
     alert('구글시트에서 확정 종강일을 불러오지 못했습니다: ' + err.message);
@@ -1133,6 +1257,7 @@ if(CONFIRMED_API_URL){
 } else {
   renderConfirmedList();
   renderExcludedList();
+  renderAddedList();
 }
 
 plannedInput.addEventListener('change', () => {
