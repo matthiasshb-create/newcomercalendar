@@ -484,7 +484,7 @@
     <div class="term-picker confirmed-list-box">
       <span class="confirmed-list-label">제외된 회차</span>
       <div class="confirmed-list" id="excludedList"></div>
-      <span class="confirmed-sync-status">특이 일정으로 뺀 회차 목록 — ↺ 누르면 복원</span>
+      <span class="confirmed-sync-status">특이 일정으로 뺀 회차 목록(참고용) — 복원하려면 "회차 추가"에서 같은 날짜를 다시 추가하면 됨</span>
     </div>
     <div class="term-picker confirmed-list-box">
       <span class="confirmed-list-label">회차 추가</span>
@@ -1026,15 +1026,11 @@ function renderExcludedList(){
   const wrap = document.getElementById('excludedList');
   if(!wrap) return;
   wrap.innerHTML = '';
+  // 복원 버튼은 따로 없음 — "회차 추가"에서 같은 날짜를 다시 추가하면 자동으로 제외 목록에서도 빠짐
   EXCLUDED_DATES.slice().sort().forEach(dateStr => {
     const chip = document.createElement('span');
     chip.className = 'confirmed-chip';
-    chip.textContent = dateStr + ' ';
-    const btn = document.createElement('button');
-    btn.textContent = '↺';
-    btn.title = '이 회차 제외 취소(복원)';
-    btn.onclick = () => unexcludeEvent(dateStr);
-    chip.appendChild(btn);
+    chip.textContent = dateStr;
     wrap.appendChild(chip);
   });
 }
@@ -1083,30 +1079,6 @@ async function excludeEvent(dateStr, label){
   render();
 }
 
-async function unexcludeEvent(dateStr){
-  if(CONFIRMED_API_URL){
-    const token = getWriteToken(true);
-    try{
-      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=unexclude&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
-      if(!res.ok){
-        localStorage.removeItem(WRITE_TOKEN_KEY);
-        alert('처리 실패: ' + res.error);
-        return;
-      }
-      EXCLUDED_DATES = res.excluded || [];
-    }catch(err){
-      alert('구글시트에 반영하지 못했습니다: ' + err.message);
-      return;
-    }
-  } else {
-    EXCLUDED_DATES = EXCLUDED_DATES.filter(d => d !== dateStr);
-    localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
-  }
-  recomputeEvents();
-  renderExcludedList();
-  render();
-}
-
 async function addExtraEvent(){
   const category = document.getElementById('addExtraCategory').value;
   const dateInput = document.getElementById('addExtraInput');
@@ -1123,6 +1095,7 @@ async function addExtraEvent(){
         return;
       }
       ADDED_DATES = res.added || [];
+      EXCLUDED_DATES = res.excluded || EXCLUDED_DATES; // 같은 날짜가 제외 목록에 있었다면 서버가 자동으로 정리해서 돌려줌
     }catch(err){
       alert('구글시트에 저장하지 못했습니다: ' + err.message);
       return;
@@ -1132,10 +1105,16 @@ async function addExtraEvent(){
       ADDED_DATES.push({ date: v, category });
       localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
     }
+    // 로컬 전용 모드에서도 마찬가지로, 다시 추가하면 제외 목록에서 자동으로 빠짐
+    if(EXCLUDED_DATES.includes(v)){
+      EXCLUDED_DATES = EXCLUDED_DATES.filter(d => d !== v);
+      localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
+    }
   }
   recomputeEvents();
   jumpToDate(v);
   renderAddedList();
+  renderExcludedList();
   render();
 }
 
