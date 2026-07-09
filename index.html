@@ -513,11 +513,13 @@ const CATEGORIES = {
   "주일예배":   "#3b6ef6",
   "새신자교육": "#22a06b",
   "종강일":     "#e0523f",
+  "서류완료":   "#8e5ec9",
 };
 const CATEGORY_ICONS = {
   "주일예배":   "🙏",
   "새신자교육": "📖",
   "종강일":     "🎓",
+  "서류완료":   "📋",
 };
 const shadeColor = (hex, percent) => {
   const num = parseInt(hex.slice(1), 16);
@@ -629,6 +631,9 @@ function computeEvents(termEndStr, tentative){
 
   // 종강일
   events.push({ date: termEndStr, category: "종강일", round: null, tentative });
+
+  // 서류완료: 종강일 기준 12일째 되는 날(화요일)
+  events.push({ date: fmtDateLocal(addDays(termEndDate, 12)), category: "서류완료", round: null, tentative });
 
   return events;
 }
