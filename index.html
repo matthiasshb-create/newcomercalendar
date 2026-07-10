@@ -299,7 +299,6 @@
     opacity:.85;
   }
   .event-cat{
-    font-size:26px;
     font-weight:800;
     letter-spacing:-.5px;
     opacity:.95;
@@ -313,7 +312,6 @@
     max-width:100%;
   }
   .event-line .event-cat{
-    font-size:15px;
     letter-spacing:-.2px;
     opacity:1;
     overflow:hidden;
@@ -322,21 +320,38 @@
     flex-shrink:1;
   }
   .event-line .round-num{
-    font-size:19px;
     font-weight:800;
     letter-spacing:-.5px;
     flex-shrink:0;
   }
   .event-line .round-unit{
-    font-size:12px;
     font-weight:600;
     opacity:.88;
     flex-shrink:0;
   }
   .event-solo{
-    font-size:25px;
     font-weight:800;
   }
+
+  /* 하루에 몰린 일정 개수(events의 data-count)에 따라 글씨 크기를 자동 조절
+     — 1개뿐이면 칸을 꽉 채우게 크게, 여러 개가 겹치면 그만큼 작게 */
+  .events[data-count="1"] .event-line .event-cat{ font-size:22px; }
+  .events[data-count="1"] .round-num{ font-size:32px; }
+  .events[data-count="1"] .round-unit{ font-size:16px; }
+  .events[data-count="1"] .event-solo{ font-size:32px; }
+  .events[data-count="1"] .event-icon{ font-size:20px; }
+
+  .events[data-count="2"] .event-line .event-cat{ font-size:15px; }
+  .events[data-count="2"] .round-num{ font-size:19px; }
+  .events[data-count="2"] .round-unit{ font-size:12px; }
+  .events[data-count="2"] .event-solo{ font-size:19px; }
+  .events[data-count="2"] .event-icon{ font-size:15px; }
+
+  .events[data-count="3"] .event-line .event-cat{ font-size:12px; }
+  .events[data-count="3"] .round-num{ font-size:14px; }
+  .events[data-count="3"] .round-unit{ font-size:9px; }
+  .events[data-count="3"] .event-solo{ font-size:14px; }
+  .events[data-count="3"] .event-icon{ font-size:11px; top:4px; left:6px; }
   .event.tentative::before{ display:none; }
   .tentative-badge{
     position:absolute;
@@ -859,6 +874,7 @@ function render(){
     const dayEvents = EVENTS
       .filter(e => e.date === dateStr)
       .sort((a,b) => categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category));
+    if(dayEvents.length) evWrap.dataset.count = Math.min(dayEvents.length, 3);
 
     dayEvents.forEach(e => {
       const base = CATEGORIES[e.category] || '#888';
