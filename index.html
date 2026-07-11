@@ -405,14 +405,34 @@
   .event:hover .event-move-btn{ opacity:1; }
   .event-move-btn:hover{ background:var(--season-accent); }
 
-  .move-date-input{
-    position:fixed;
-    width:1px;
-    height:1px;
-    opacity:0;
-    border:none;
-    padding:0;
+  .move-banner{
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--season-accent);
+    color:#fff;
+    padding:9px 16px;
+    border-radius:10px;
+    font-size:13px;
+    font-weight:700;
+    margin-bottom:14px;
   }
+  .move-banner button{
+    border:none;
+    background:rgba(255,255,255,.25);
+    color:#fff;
+    border-radius:6px;
+    padding:4px 12px;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  .move-banner button:hover{ background:rgba(255,255,255,.42); }
+
+  .grid.move-mode .cell{ cursor:pointer; }
+  .grid.move-mode .cell:hover{ outline:2px solid var(--season-accent); outline-offset:-2px; }
 
   .decor{
     position:fixed;
@@ -526,6 +546,11 @@
 
     <div class="legend" id="legend"></div>
 
+    <div class="move-banner" id="moveBanner">
+      <span id="moveBannerText"></span>
+      <button onclick="cancelMove()">취소 (Esc)</button>
+    </div>
+
     <div class="calendar">
       <div class="weekdays">
         <div>일</div><div>월</div><div>화</div><div>수</div><div>목</div><div>금</div><div>토</div>
@@ -546,6 +571,7 @@
         <select id="addExtraCategory">
           <option value="주일예배">주일예배</option>
           <option value="새신자교육" selected>새신자교육</option>
+          <option value="서류완료">서류완료</option>
         </select>
         <input type="date" id="addExtraInput">
         <button class="term-add" onclick="addExtraEvent()">추가</button>
@@ -719,12 +745,13 @@ const findHoliday = dateStr => HOLIDAYS.find(h => h.date === dateStr);
 
 // 자동 계산된 날짜(rawDateStrs)에서 제외된 날짜는 빼고, 수동으로 추가된(ADDED_DATES) 같은
 // 카테고리의 날짜는 끼워넣은 뒤, 날짜순으로 정렬해서 1회차부터 다시 번호를 매겨 events에 추가.
-function pushRoundedEvents_(events, rawDateStrs, category, tentative){
+// solo=true면 회차 번호를 매기지 않음(종강일 기준 하루뿐인 서류완료 같은 단독 일정 이동용).
+function pushRoundedEvents_(events, rawDateStrs, category, tentative, solo){
   const kept = rawDateStrs.filter(ds => !EXCLUDED_DATES.includes(ds));
   const added = ADDED_DATES.filter(a => a.category === category).map(a => a.date);
   const merged = Array.from(new Set([...kept, ...added])).sort();
   merged.forEach((ds, idx) => {
-    events.push({ date: ds, category, round: idx+1, tentative });
+    events.push({ date: ds, category, round: solo ? null : idx+1, tentative });
   });
 }
 
@@ -764,8 +791,9 @@ function computeEvents(termEndStr, tentative){
   // 종강일
   events.push({ date: termEndStr, category: "종강일", round: null, tentative });
 
-  // 서류완료: 종강일 기준 12일째 되는 날(화요일)
-  events.push({ date: fmtDateLocal(addDays(termEndDate, 12)), category: "서류완료", round: null, tentative });
+  // 서류완료: 종강일 기준 12일째 되는 날(화요일). 다른 회차처럼 이동 가능하도록
+  // pushRoundedEvents_를 거쳐 EXCLUDED_DATES/ADDED_DATES(서류완료 카테고리)를 반영.
+  pushRoundedEvents_(events, [fmtDateLocal(addDays(termEndDate, 12))], "서류완료", tentative, true);
 
   return events;
 }
@@ -880,6 +908,12 @@ function render(){
     cell.className = 'cell' + (otherMonth ? ' other-month' : '')
       + (weekday===0 ? ' sunday' : '') + (weekday===6 ? ' saturday' : '')
       + (dateStr===todayStr ? ' today' : '');
+    cell.addEventListener('click', () => {
+      if(!pendingMove) return;
+      const { oldDate, category, label } = pendingMove;
+      cancelMove();
+      if(dateStr !== oldDate) moveEvent(oldDate, dateStr, category, label);
+    });
 
     const dateRow = document.createElement('div');
     dateRow.className = 'date-row';
@@ -953,13 +987,22 @@ function render(){
         moveBtn.className = 'event-move-btn';
         moveBtn.textContent = '↔';
         moveBtn.title = '이 회차를 다른 날짜로 이동';
-        moveBtn.onclick = (evt) => { evt.stopPropagation(); pickMoveDate(moveBtn, e.date, e.category, `${e.category} ${e.round}회차`); };
+        moveBtn.onclick = (evt) => { evt.stopPropagation(); startMove(e.date, e.category, `${e.category} ${e.round}회차`); };
         el.appendChild(moveBtn);
       } else {
         const cat = document.createElement('div');
         cat.className = 'event-cat event-solo';
         cat.textContent = e.category;
         el.appendChild(cat);
+
+        if(e.category === '서류완료'){
+          const moveBtn = document.createElement('button');
+          moveBtn.className = 'event-move-btn';
+          moveBtn.textContent = '↔';
+          moveBtn.title = '이 일정을 다른 날짜로 이동';
+          moveBtn.onclick = (evt) => { evt.stopPropagation(); startMove(e.date, e.category, e.category); };
+          el.appendChild(moveBtn);
+        }
       }
 
       evWrap.appendChild(el);
@@ -1237,30 +1280,30 @@ async function doAddExtraDate_(dateStr, category){
   }
 }
 
-// 회차 박스의 ↔ 버튼을 누르면 그 자리에 숨겨진 date input을 띄워 네이티브 달력
-// 선택창이 바로 열리게 한다(공유 input 하나를 재사용, 클릭 위치로 옮겨서 표시).
-function pickMoveDate(triggerEl, oldDate, category, label){
-  let input = document.getElementById('moveDateInput');
-  if(!input){
-    input = document.createElement('input');
-    input.type = 'date';
-    input.id = 'moveDateInput';
-    input.className = 'move-date-input';
-    document.body.appendChild(input);
-  }
-  const rect = triggerEl.getBoundingClientRect();
-  input.style.left = `${rect.left}px`;
-  input.style.top = `${rect.bottom}px`;
-  input.value = oldDate;
-  input.onchange = () => {
-    const newDate = input.value;
-    if(newDate && newDate !== oldDate) moveEvent(oldDate, newDate, category, label);
-  };
-  if(input.showPicker){ input.showPicker(); } else { input.focus(); input.click(); }
+// 회차 박스의 ↔ 버튼을 누르면 "이동 모드"로 들어간다 — 별도 날짜 선택창/확인창 없이,
+// 달력에서 원하는 날짜 칸을 바로 클릭하면 그 자리로 즉시 이동된다(Esc 또는 배너의
+// 취소 버튼으로 취소, 같은 날짜를 다시 클릭해도 취소).
+let pendingMove = null;
+
+function startMove(oldDate, category, label){
+  pendingMove = { oldDate, category, label };
+  document.getElementById('grid').classList.add('move-mode');
+  const banner = document.getElementById('moveBanner');
+  banner.style.display = 'flex';
+  document.getElementById('moveBannerText').textContent = `${label} 이동 중 — 달력에서 새 날짜를 클릭하세요`;
 }
 
+function cancelMove(){
+  pendingMove = null;
+  document.getElementById('grid').classList.remove('move-mode');
+  document.getElementById('moveBanner').style.display = 'none';
+}
+
+document.addEventListener('keydown', (evt) => {
+  if(evt.key === 'Escape' && pendingMove) cancelMove();
+});
+
 async function moveEvent(oldDate, newDate, category, label){
-  if(!confirm(`${label}을(를) ${oldDate} → ${newDate}로 옮기시겠어요?`)) return;
   try{
     const wasManuallyAdded = ADDED_DATES.some(a => a.date === oldDate && a.category === category);
     if(wasManuallyAdded){
