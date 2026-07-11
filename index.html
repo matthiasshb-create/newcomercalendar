@@ -573,11 +573,12 @@
           <option value="새신자교육" selected>새신자교육</option>
           <option value="서류완료">서류완료</option>
         </select>
+        <select id="addExtraTermEnd"></select>
         <input type="date" id="addExtraInput">
         <button class="term-add" onclick="addExtraEvent()">추가</button>
       </div>
       <div class="confirmed-list" id="addedList"></div>
-      <span class="confirmed-sync-status">예: 화요일 회차가 월요일로 당겨진 경우 등 — 추가된 날짜는 기존 회차와 날짜순으로 합쳐져 다시 번호가 매겨짐. 회차를 뺀 뒤 복원하고 싶을 때도 여기서 같은 날짜를 다시 추가하면 됨</span>
+      <span class="confirmed-sync-status">먼저 어느 기수인지 선택 후 날짜 추가. 예: 화요일 회차가 월요일로 당겨진 경우 등 — 추가된 날짜는 그 기수의 기존 회차와 날짜순으로 합쳐져 다시 번호가 매겨짐. 회차를 뺀 뒤 복원하고 싶을 때도 여기서 같은 날짜를 다시 추가하면 됨</span>
     </div>
   </aside>
 </div>
@@ -614,7 +615,9 @@ let CONFIRMED_TERM_ENDS = CONFIRMED_API_URL ? [] : loadConfirmedListLocal();
 let PLANNED_TERM_END = null;
 
 // 특이 일정 등으로 특정 회차를 통째로 빼야 할 때(예: 8회 중 3회차만 취소) 사용 —
-// 제외된 날짜는 계산에서 빠지고, 그 뒤 회차들은 번호가 당겨짐(4회차→3회차 식)
+// 제외된 날짜는 계산에서 빠지고, 그 뒤 회차들은 번호가 당겨짐(4회차→3회차 식).
+// 여러 기수(확정 종강일)가 동시에 떠 있을 때 한 기수의 제외가 다른 기수 계산에
+// 새어 들어가지 않도록, 각 항목은 { date, termEnd }로 어느 기수 것인지 함께 저장한다.
 const EXCLUDED_KEY = 'newcomerEduExcludedDates';
 function loadExcludedListLocal(){
   return JSON.parse(localStorage.getItem(EXCLUDED_KEY) || '[]');
@@ -622,7 +625,7 @@ function loadExcludedListLocal(){
 let EXCLUDED_DATES = CONFIRMED_API_URL ? [] : loadExcludedListLocal();
 
 // 반대로 "화요일 회차가 월요일로 당겨졌다" 같은 특이 일정으로, 자동 계산에 없는
-// 날짜를 회차로 끼워넣어야 할 때 사용. { date, category } 쌍의 목록.
+// 날짜를 회차로 끼워넣어야 할 때 사용. { date, category, termEnd } 목록(termEnd 이유는 위와 동일).
 const ADDED_KEY = 'newcomerEduAddedDates';
 function loadAddedListLocal(){
   return JSON.parse(localStorage.getItem(ADDED_KEY) || '[]');
@@ -745,13 +748,14 @@ const findHoliday = dateStr => HOLIDAYS.find(h => h.date === dateStr);
 
 // 자동 계산된 날짜(rawDateStrs)에서 제외된 날짜는 빼고, 수동으로 추가된(ADDED_DATES) 같은
 // 카테고리의 날짜는 끼워넣은 뒤, 날짜순으로 정렬해서 1회차부터 다시 번호를 매겨 events에 추가.
+// termEnd로 "이 기수(종강일)에 속한 제외/추가만" 반영 — 다른 기수의 제외/추가가 섞여 들어가지 않게 함.
 // solo=true면 회차 번호를 매기지 않음(종강일 기준 하루뿐인 서류완료 같은 단독 일정 이동용).
-function pushRoundedEvents_(events, rawDateStrs, category, tentative, solo){
-  const kept = rawDateStrs.filter(ds => !EXCLUDED_DATES.includes(ds));
-  const added = ADDED_DATES.filter(a => a.category === category).map(a => a.date);
+function pushRoundedEvents_(events, rawDateStrs, category, tentative, termEnd, solo){
+  const kept = rawDateStrs.filter(ds => !EXCLUDED_DATES.some(x => x.date === ds && x.termEnd === termEnd));
+  const added = ADDED_DATES.filter(a => a.category === category && a.termEnd === termEnd).map(a => a.date);
   const merged = Array.from(new Set([...kept, ...added])).sort();
   merged.forEach((ds, idx) => {
-    events.push({ date: ds, category, round: solo ? null : idx+1, tentative });
+    events.push({ date: ds, category, round: solo ? null : idx+1, tentative, termEnd });
   });
 }
 
@@ -772,7 +776,7 @@ function computeEvents(termEndStr, tentative){
     if(!findHoliday(fmtDateLocal(worshipCandidate))) worshipDates.push(worshipCandidate);
     worshipCandidate = addDays(worshipCandidate, -7);
   }
-  pushRoundedEvents_(events, worshipDates.reverse().map(fmtDateLocal), "주일예배", tentative);
+  pushRoundedEvents_(events, worshipDates.reverse().map(fmtDateLocal), "주일예배", tentative, termEndStr);
 
   // 새신자교육 8회 (일,월,수,목 반복), eduStartSunday부터 시작해 공휴일은 건너뛰고 8번 채움
   const eduWeekdayOffsets = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4) — eduStartSunday 기준 오프셋
@@ -786,14 +790,14 @@ function computeEvents(termEndStr, tentative){
     }
     week++;
   }
-  pushRoundedEvents_(events, eduDates.map(fmtDateLocal), "새신자교육", tentative);
+  pushRoundedEvents_(events, eduDates.map(fmtDateLocal), "새신자교육", tentative, termEndStr);
 
   // 종강일
-  events.push({ date: termEndStr, category: "종강일", round: null, tentative });
+  events.push({ date: termEndStr, category: "종강일", round: null, tentative, termEnd: termEndStr });
 
   // 서류완료: 종강일 기준 12일째 되는 날(화요일). 다른 회차처럼 이동 가능하도록
-  // pushRoundedEvents_를 거쳐 EXCLUDED_DATES/ADDED_DATES(서류완료 카테고리)를 반영.
-  pushRoundedEvents_(events, [fmtDateLocal(addDays(termEndDate, 12))], "서류완료", tentative, true);
+  // pushRoundedEvents_를 거쳐 EXCLUDED_DATES/ADDED_DATES(서류완료 카테고리, 이 기수분만)를 반영.
+  pushRoundedEvents_(events, [fmtDateLocal(addDays(termEndDate, 12))], "서류완료", tentative, termEndStr, true);
 
   return events;
 }
@@ -910,9 +914,9 @@ function render(){
       + (dateStr===todayStr ? ' today' : '');
     cell.addEventListener('click', () => {
       if(!pendingMove) return;
-      const { oldDate, category, label } = pendingMove;
+      const { oldDate, category, label, termEnd } = pendingMove;
       cancelMove();
-      if(dateStr !== oldDate) moveEvent(oldDate, dateStr, category, label);
+      if(dateStr !== oldDate) moveEvent(oldDate, dateStr, category, label, termEnd);
     });
 
     const dateRow = document.createElement('div');
@@ -980,14 +984,14 @@ function render(){
         excludeBtn.className = 'event-exclude-btn';
         excludeBtn.textContent = '×';
         excludeBtn.title = '이 회차를 특이 일정으로 빼기';
-        excludeBtn.onclick = (evt) => { evt.stopPropagation(); excludeEvent(e.date, `${e.category} ${e.round}회차`); };
+        excludeBtn.onclick = (evt) => { evt.stopPropagation(); excludeEvent(e.date, `${e.category} ${e.round}회차`, e.termEnd); };
         el.appendChild(excludeBtn);
 
         const moveBtn = document.createElement('button');
         moveBtn.className = 'event-move-btn';
         moveBtn.textContent = '↔';
         moveBtn.title = '이 회차를 다른 날짜로 이동';
-        moveBtn.onclick = (evt) => { evt.stopPropagation(); startMove(e.date, e.category, `${e.category} ${e.round}회차`); };
+        moveBtn.onclick = (evt) => { evt.stopPropagation(); startMove(e.date, e.category, `${e.category} ${e.round}회차`, e.termEnd); };
         el.appendChild(moveBtn);
       } else {
         const cat = document.createElement('div');
@@ -1000,7 +1004,7 @@ function render(){
           moveBtn.className = 'event-move-btn';
           moveBtn.textContent = '↔';
           moveBtn.title = '이 일정을 다른 날짜로 이동';
-          moveBtn.onclick = (evt) => { evt.stopPropagation(); startMove(e.date, e.category, e.category); };
+          moveBtn.onclick = (evt) => { evt.stopPropagation(); startMove(e.date, e.category, e.category, e.termEnd); };
           el.appendChild(moveBtn);
         }
       }
@@ -1134,22 +1138,34 @@ function renderAddedList(){
   ADDED_DATES.slice().sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0).forEach(item => {
     const chip = document.createElement('span');
     chip.className = 'confirmed-chip';
-    chip.textContent = `${item.date} (${item.category}) `;
+    chip.textContent = `${item.date} (${item.category}, ${item.termEnd} 기수) `;
     const btn = document.createElement('button');
     btn.textContent = '×';
     btn.title = '이 추가 회차 삭제';
-    btn.onclick = () => removeExtraEvent(item.date);
+    btn.onclick = () => removeExtraEvent(item.date, item.termEnd);
     chip.appendChild(btn);
     wrap.appendChild(chip);
   });
 }
 
-async function excludeEvent(dateStr, label){
-  if(!confirm(`${label}(${dateStr})을 이번 기수에서 빼시겠어요?\n이후 회차 번호가 하나씩 당겨집니다.`)) return;
+// 사이드바 "회차 추가" 폼의 기수 선택 드롭다운을 CONFIRMED_TERM_ENDS(+예정)로 채움 —
+// 확정/예정 종강일이 바뀔 때마다 다시 호출해서 최신 목록을 유지.
+function renderTermEndOptions(){
+  const sel = document.getElementById('addExtraTermEnd');
+  if(!sel) return;
+  const prev = sel.value;
+  const confirmedOpts = CONFIRMED_TERM_ENDS.slice().sort().map(d => `<option value="${d}">${d} 기수</option>`).join('');
+  const plannedOpt = PLANNED_TERM_END ? `<option value="${PLANNED_TERM_END}">${PLANNED_TERM_END} 기수(예정)</option>` : '';
+  sel.innerHTML = confirmedOpts + plannedOpt;
+  if(Array.from(sel.options).some(o => o.value === prev)) sel.value = prev;
+}
+
+async function excludeEvent(dateStr, label, termEnd){
+  if(!confirm(`${label}(${dateStr}, ${termEnd} 기수)을 이번 기수에서 빼시겠어요?\n이후 회차 번호가 하나씩 당겨집니다.`)) return;
   if(CONFIRMED_API_URL){
     const token = getWriteToken(true);
     try{
-      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=exclude&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=exclude&date=${encodeURIComponent(dateStr)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
       if(!res.ok){
         localStorage.removeItem(WRITE_TOKEN_KEY);
         alert('처리 실패: ' + res.error);
@@ -1161,8 +1177,8 @@ async function excludeEvent(dateStr, label){
       return;
     }
   } else {
-    if(!EXCLUDED_DATES.includes(dateStr)){
-      EXCLUDED_DATES.push(dateStr);
+    if(!EXCLUDED_DATES.some(x => x.date === dateStr && x.termEnd === termEnd)){
+      EXCLUDED_DATES.push({ date: dateStr, termEnd });
       localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
     }
   }
@@ -1172,33 +1188,34 @@ async function excludeEvent(dateStr, label){
 
 async function addExtraEvent(){
   const category = document.getElementById('addExtraCategory').value;
+  const termEnd = document.getElementById('addExtraTermEnd').value;
   const dateInput = document.getElementById('addExtraInput');
   const v = dateInput.value;
-  if(!v) return;
+  if(!v || !termEnd) return;
   dateInput.value = '';
   if(CONFIRMED_API_URL){
     const token = getWriteToken(true);
     try{
-      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=addExtra&date=${encodeURIComponent(v)}&category=${encodeURIComponent(category)}&token=${encodeURIComponent(token)}`);
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=addExtra&date=${encodeURIComponent(v)}&category=${encodeURIComponent(category)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
       if(!res.ok){
         localStorage.removeItem(WRITE_TOKEN_KEY);
         alert('저장 실패: ' + res.error);
         return;
       }
       ADDED_DATES = res.added || [];
-      EXCLUDED_DATES = res.excluded || EXCLUDED_DATES; // 같은 날짜가 제외 목록에 있었다면 서버가 자동으로 정리해서 돌려줌
+      EXCLUDED_DATES = res.excluded || EXCLUDED_DATES; // 같은 기수의 같은 날짜가 제외 목록에 있었다면 서버가 자동으로 정리해서 돌려줌
     }catch(err){
       alert('구글시트에 저장하지 못했습니다: ' + err.message);
       return;
     }
   } else {
-    if(!ADDED_DATES.some(a => a.date === v)){
-      ADDED_DATES.push({ date: v, category });
+    if(!ADDED_DATES.some(a => a.date === v && a.termEnd === termEnd)){
+      ADDED_DATES.push({ date: v, category, termEnd });
       localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
     }
-    // 로컬 전용 모드에서도 마찬가지로, 다시 추가하면 제외 목록에서 자동으로 빠짐
-    if(EXCLUDED_DATES.includes(v)){
-      EXCLUDED_DATES = EXCLUDED_DATES.filter(d => d !== v);
+    // 로컬 전용 모드에서도 마찬가지로, 같은 기수에 다시 추가하면 제외 목록에서 자동으로 빠짐
+    if(EXCLUDED_DATES.some(x => x.date === v && x.termEnd === termEnd)){
+      EXCLUDED_DATES = EXCLUDED_DATES.filter(x => !(x.date === v && x.termEnd === termEnd));
       localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
     }
   }
@@ -1208,11 +1225,11 @@ async function addExtraEvent(){
   render();
 }
 
-async function removeExtraEvent(dateStr){
+async function removeExtraEvent(dateStr, termEnd){
   if(CONFIRMED_API_URL){
     const token = getWriteToken(true);
     try{
-      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=removeExtra&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+      const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=removeExtra&date=${encodeURIComponent(dateStr)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
       if(!res.ok){
         localStorage.removeItem(WRITE_TOKEN_KEY);
         alert('삭제 실패: ' + res.error);
@@ -1224,7 +1241,7 @@ async function removeExtraEvent(dateStr){
       return;
     }
   } else {
-    ADDED_DATES = ADDED_DATES.filter(a => a.date !== dateStr);
+    ADDED_DATES = ADDED_DATES.filter(a => !(a.date === dateStr && a.termEnd === termEnd));
     localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
   }
   recomputeEvents();
@@ -1237,44 +1254,44 @@ async function removeExtraEvent(dateStr){
 // exclude(옛 날짜)/addExtra(새 날짜) 두 액션을 순서대로 호출한다(서버 API가 별도라서).
 // 이미 한 번 이동된(=ADDED_DATES에 있는) 회차를 다시 옮길 때는 exclude가 아니라
 // removeExtra로 지워야 흔적이 안 남으므로 두 경우를 구분한다.
-async function doExcludeDate_(dateStr){
+async function doExcludeDate_(dateStr, termEnd){
   if(CONFIRMED_API_URL){
     const token = getWriteToken(true);
-    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=exclude&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=exclude&date=${encodeURIComponent(dateStr)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
     if(!res.ok){ localStorage.removeItem(WRITE_TOKEN_KEY); throw new Error(res.error); }
     EXCLUDED_DATES = res.excluded || [];
-  } else if(!EXCLUDED_DATES.includes(dateStr)){
-    EXCLUDED_DATES.push(dateStr);
+  } else if(!EXCLUDED_DATES.some(x => x.date === dateStr && x.termEnd === termEnd)){
+    EXCLUDED_DATES.push({ date: dateStr, termEnd });
     localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
   }
 }
 
-async function doRemoveExtraDate_(dateStr){
+async function doRemoveExtraDate_(dateStr, termEnd){
   if(CONFIRMED_API_URL){
     const token = getWriteToken(true);
-    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=removeExtra&date=${encodeURIComponent(dateStr)}&token=${encodeURIComponent(token)}`);
+    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=removeExtra&date=${encodeURIComponent(dateStr)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
     if(!res.ok){ localStorage.removeItem(WRITE_TOKEN_KEY); throw new Error(res.error); }
     ADDED_DATES = res.added || [];
   } else {
-    ADDED_DATES = ADDED_DATES.filter(a => a.date !== dateStr);
+    ADDED_DATES = ADDED_DATES.filter(a => !(a.date === dateStr && a.termEnd === termEnd));
     localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
   }
 }
 
-async function doAddExtraDate_(dateStr, category){
+async function doAddExtraDate_(dateStr, category, termEnd){
   if(CONFIRMED_API_URL){
     const token = getWriteToken(true);
-    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=addExtra&date=${encodeURIComponent(dateStr)}&category=${encodeURIComponent(category)}&token=${encodeURIComponent(token)}`);
+    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=addExtra&date=${encodeURIComponent(dateStr)}&category=${encodeURIComponent(category)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
     if(!res.ok){ localStorage.removeItem(WRITE_TOKEN_KEY); throw new Error(res.error); }
     ADDED_DATES = res.added || [];
     EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
   } else {
-    if(!ADDED_DATES.some(a => a.date === dateStr)){
-      ADDED_DATES.push({ date: dateStr, category });
+    if(!ADDED_DATES.some(a => a.date === dateStr && a.termEnd === termEnd)){
+      ADDED_DATES.push({ date: dateStr, category, termEnd });
       localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
     }
-    if(EXCLUDED_DATES.includes(dateStr)){
-      EXCLUDED_DATES = EXCLUDED_DATES.filter(d => d !== dateStr);
+    if(EXCLUDED_DATES.some(x => x.date === dateStr && x.termEnd === termEnd)){
+      EXCLUDED_DATES = EXCLUDED_DATES.filter(x => !(x.date === dateStr && x.termEnd === termEnd));
       localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
     }
   }
@@ -1282,15 +1299,16 @@ async function doAddExtraDate_(dateStr, category){
 
 // 회차 박스의 ↔ 버튼을 누르면 "이동 모드"로 들어간다 — 별도 날짜 선택창/확인창 없이,
 // 달력에서 원하는 날짜 칸을 바로 클릭하면 그 자리로 즉시 이동된다(Esc 또는 배너의
-// 취소 버튼으로 취소, 같은 날짜를 다시 클릭해도 취소).
+// 취소 버튼으로 취소, 같은 날짜를 다시 클릭해도 취소). termEnd는 이 회차가 어느
+// 기수 소속인지 기억해뒀다가, 다른 기수 계산에 새어 들어가지 않도록 그대로 넘긴다.
 let pendingMove = null;
 
-function startMove(oldDate, category, label){
-  pendingMove = { oldDate, category, label };
+function startMove(oldDate, category, label, termEnd){
+  pendingMove = { oldDate, category, label, termEnd };
   document.getElementById('grid').classList.add('move-mode');
   const banner = document.getElementById('moveBanner');
   banner.style.display = 'flex';
-  document.getElementById('moveBannerText').textContent = `${label} 이동 중 — 달력에서 새 날짜를 클릭하세요`;
+  document.getElementById('moveBannerText').textContent = `${label} (${termEnd} 기수) 이동 중 — 달력에서 새 날짜를 클릭하세요`;
 }
 
 function cancelMove(){
@@ -1303,15 +1321,15 @@ document.addEventListener('keydown', (evt) => {
   if(evt.key === 'Escape' && pendingMove) cancelMove();
 });
 
-async function moveEvent(oldDate, newDate, category, label){
+async function moveEvent(oldDate, newDate, category, label, termEnd){
   try{
-    const wasManuallyAdded = ADDED_DATES.some(a => a.date === oldDate && a.category === category);
+    const wasManuallyAdded = ADDED_DATES.some(a => a.date === oldDate && a.category === category && a.termEnd === termEnd);
     if(wasManuallyAdded){
-      await doRemoveExtraDate_(oldDate);
+      await doRemoveExtraDate_(oldDate, termEnd);
     } else {
-      await doExcludeDate_(oldDate);
+      await doExcludeDate_(oldDate, termEnd);
     }
-    await doAddExtraDate_(newDate, category);
+    await doAddExtraDate_(newDate, category, termEnd);
   }catch(err){
     alert('이동 처리 중 오류: ' + err.message);
   }
@@ -1338,6 +1356,7 @@ async function addConfirmed(){
         recomputeEvents();
         renderConfirmedList();
         renderAddedList();
+        renderTermEndOptions();
         render();
         return;
       }
@@ -1358,6 +1377,7 @@ async function addConfirmed(){
   jumpToDate(v);
   renderConfirmedList();
   renderAddedList();
+  renderTermEndOptions();
   render();
 }
 
@@ -1375,6 +1395,7 @@ async function removeConfirmed(dateStr){
         recomputeEvents();
         renderConfirmedList();
         renderAddedList();
+        renderTermEndOptions();
         render();
         return;
       }
@@ -1392,6 +1413,7 @@ async function removeConfirmed(dateStr){
   recomputeEvents();
   renderConfirmedList();
   renderAddedList();
+  renderTermEndOptions();
   render();
 }
 
@@ -1403,6 +1425,7 @@ if(CONFIRMED_API_URL){
     recomputeEvents();
     renderConfirmedList();
     renderAddedList();
+    renderTermEndOptions();
     render();
   }).catch(err => {
     alert('구글시트에서 확정 종강일을 불러오지 못했습니다: ' + err.message);
@@ -1410,12 +1433,14 @@ if(CONFIRMED_API_URL){
 } else {
   renderConfirmedList();
   renderAddedList();
+  renderTermEndOptions();
 }
 
 plannedInput.addEventListener('change', () => {
   PLANNED_TERM_END = plannedInput.value || null;
   recomputeEvents();
   if(PLANNED_TERM_END) jumpToDate(PLANNED_TERM_END);
+  renderTermEndOptions();
   render();
 });
 
@@ -1423,6 +1448,7 @@ function clearPlanned(){
   PLANNED_TERM_END = null;
   plannedInput.value = '';
   recomputeEvents();
+  renderTermEndOptions();
   render();
 }
 
