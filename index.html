@@ -1254,46 +1254,29 @@ async function removeExtraEvent(dateStr, termEnd){
 // exclude(옛 날짜)/addExtra(새 날짜) 두 액션을 순서대로 호출한다(서버 API가 별도라서).
 // 이미 한 번 이동된(=ADDED_DATES에 있는) 회차를 다시 옮길 때는 exclude가 아니라
 // removeExtra로 지워야 흔적이 안 남으므로 두 경우를 구분한다.
-async function doExcludeDate_(dateStr, termEnd){
+// 제외(옛 날짜)+추가(새 날짜)를 서버 요청 1번으로 처리(action=move) — 예전엔 두 번
+// 순차로 요청해서 느렸던 것을 한 번으로 줄임. 로컬 전용(공유 안 함) 모드에서는
+// 네트워크 요청이 애초에 없으니 그냥 로컬 배열만 동일한 순서로 갱신.
+async function doMoveDate_(oldDate, newDate, category, termEnd){
   if(CONFIRMED_API_URL){
     const token = getWriteToken(true);
-    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=exclude&date=${encodeURIComponent(dateStr)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
+    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=move&date=${encodeURIComponent(oldDate)}&newDate=${encodeURIComponent(newDate)}&category=${encodeURIComponent(category)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
     if(!res.ok){ localStorage.removeItem(WRITE_TOKEN_KEY); throw new Error(res.error); }
     EXCLUDED_DATES = res.excluded || [];
-  } else if(!EXCLUDED_DATES.some(x => x.date === dateStr && x.termEnd === termEnd)){
-    EXCLUDED_DATES.push({ date: dateStr, termEnd });
+    ADDED_DATES = res.added || [];
+  } else {
+    const wasManuallyAdded = ADDED_DATES.some(a => a.date === oldDate && a.category === category && a.termEnd === termEnd);
+    if(wasManuallyAdded){
+      ADDED_DATES = ADDED_DATES.filter(a => !(a.date === oldDate && a.termEnd === termEnd));
+    } else if(!EXCLUDED_DATES.some(x => x.date === oldDate && x.termEnd === termEnd)){
+      EXCLUDED_DATES.push({ date: oldDate, termEnd });
+    }
+    if(!ADDED_DATES.some(a => a.date === newDate && a.termEnd === termEnd)){
+      ADDED_DATES.push({ date: newDate, category, termEnd });
+    }
+    EXCLUDED_DATES = EXCLUDED_DATES.filter(x => !(x.date === newDate && x.termEnd === termEnd));
     localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
-  }
-}
-
-async function doRemoveExtraDate_(dateStr, termEnd){
-  if(CONFIRMED_API_URL){
-    const token = getWriteToken(true);
-    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=removeExtra&date=${encodeURIComponent(dateStr)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
-    if(!res.ok){ localStorage.removeItem(WRITE_TOKEN_KEY); throw new Error(res.error); }
-    ADDED_DATES = res.added || [];
-  } else {
-    ADDED_DATES = ADDED_DATES.filter(a => !(a.date === dateStr && a.termEnd === termEnd));
     localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
-  }
-}
-
-async function doAddExtraDate_(dateStr, category, termEnd){
-  if(CONFIRMED_API_URL){
-    const token = getWriteToken(true);
-    const res = await jsonpRequest(`${CONFIRMED_API_URL}?action=addExtra&date=${encodeURIComponent(dateStr)}&category=${encodeURIComponent(category)}&termEnd=${encodeURIComponent(termEnd)}&token=${encodeURIComponent(token)}`);
-    if(!res.ok){ localStorage.removeItem(WRITE_TOKEN_KEY); throw new Error(res.error); }
-    ADDED_DATES = res.added || [];
-    EXCLUDED_DATES = res.excluded || EXCLUDED_DATES;
-  } else {
-    if(!ADDED_DATES.some(a => a.date === dateStr && a.termEnd === termEnd)){
-      ADDED_DATES.push({ date: dateStr, category, termEnd });
-      localStorage.setItem(ADDED_KEY, JSON.stringify(ADDED_DATES));
-    }
-    if(EXCLUDED_DATES.some(x => x.date === dateStr && x.termEnd === termEnd)){
-      EXCLUDED_DATES = EXCLUDED_DATES.filter(x => !(x.date === dateStr && x.termEnd === termEnd));
-      localStorage.setItem(EXCLUDED_KEY, JSON.stringify(EXCLUDED_DATES));
-    }
   }
 }
 
@@ -1322,17 +1305,19 @@ document.addEventListener('keydown', (evt) => {
 });
 
 async function moveEvent(oldDate, newDate, category, label, termEnd){
+  const banner = document.getElementById('moveBanner');
+  const bannerText = document.getElementById('moveBannerText');
+  const cancelBtn = banner.querySelector('button');
+  banner.style.display = 'flex';
+  cancelBtn.style.display = 'none';
+  bannerText.textContent = `${label} 이동 처리 중…`;
   try{
-    const wasManuallyAdded = ADDED_DATES.some(a => a.date === oldDate && a.category === category && a.termEnd === termEnd);
-    if(wasManuallyAdded){
-      await doRemoveExtraDate_(oldDate, termEnd);
-    } else {
-      await doExcludeDate_(oldDate, termEnd);
-    }
-    await doAddExtraDate_(newDate, category, termEnd);
+    await doMoveDate_(oldDate, newDate, category, termEnd);
   }catch(err){
     alert('이동 처리 중 오류: ' + err.message);
   }
+  cancelBtn.style.display = '';
+  banner.style.display = 'none';
   recomputeEvents();
   jumpToDate(newDate);
   renderAddedList();
