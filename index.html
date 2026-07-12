@@ -332,6 +332,16 @@
   .event-solo{
     font-weight:800;
   }
+  .event-term{
+    font-size:9px;
+    font-weight:600;
+    opacity:.8;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:100%;
+    margin-top:1px;
+  }
 
   /* 하루에 몰린 일정 개수(events의 data-count)에 따라 글씨 크기를 자동 조절
      — 1개뿐이면 칸을 꽉 채우게 크게, 여러 개가 겹치면 그만큼 작게 */
@@ -352,6 +362,7 @@
   .events[data-count="3"] .round-unit{ font-size:9px; }
   .events[data-count="3"] .event-solo{ font-size:14px; }
   .events[data-count="3"] .event-icon{ font-size:11px; top:4px; left:6px; }
+  .events[data-count="3"] .event-term{ display:none; } /* 박스가 너무 작아지면 개강반 표시는 생략 */
   .event.tentative::before{ display:none; }
   .tentative-badge{
     position:absolute;
@@ -660,7 +671,17 @@ function getWriteToken(promptIfMissing){
 
 // 신년도 표기 오프셋(신 N년 = 서기 - SINYEAR_OFFSET) 및 개강반 표기까지의 개월 수
 const SINYEAR_OFFSET = 1983;
-const CLASS_DURATION_MONTHS = 8; // 화면에 표시된 달 기준, 몇 개월 전이 개강월인지
+const CLASS_DURATION_MONTHS = 8; // 기준 달(종강 등) 기준, 몇 개월 전이 개강월인지
+
+// "YYYY년 M월" 기준으로 그 몇 개월 전(CLASS_DURATION_MONTHS)이 개강월인지 계산해
+// "신 N(YYYY)년 M월 개강반" 문자열을 만든다. 헤더(현재 표시 월 기준)와 각 이벤트
+// 박스(그 이벤트가 속한 기수의 종강월 기준) 양쪽에서 공용으로 사용.
+function classStartLabel(year, month){
+  const classStart = new Date(year, month-1 - CLASS_DURATION_MONTHS, 1);
+  const cy = classStart.getFullYear();
+  const cm = classStart.getMonth() + 1;
+  return `신 ${cy - SINYEAR_OFFSET}(${cy})년 ${cm}월 개강반`;
+}
 
 // 3) 카테고리별 색상 / 아이콘
 const CATEGORIES = {
@@ -778,13 +799,25 @@ function computeEvents(termEndStr, tentative){
   }
   pushRoundedEvents_(events, worshipDates.reverse().map(fmtDateLocal), "주일예배", tentative, termEndStr);
 
-  // 새신자교육 8회 (일,월,수,목 반복), eduStartSunday부터 시작해 공휴일은 건너뛰고 8번 채움
-  const eduWeekdayOffsets = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4) — eduStartSunday 기준 오프셋
+  // 새신자교육 총 12회: 1~8회차는 일,월,수,목 반복(2주), 8회차가 끝나면 이어서
+  // 9~12회차는 일,수 반복(2주)로 전환. eduStartSunday부터 시작해 공휴일은 건너뛰고 채움.
+  // week 카운터를 두 구간이 공유해서, 공휴일 때문에 1~8회차가 예정보다 늦게 끝나도
+  // 9회차부터는 그 다음 주부터 자연스럽게 이어짐.
+  const eduWeekdayOffsetsA = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4) — 1~8회차
+  const eduWeekdayOffsetsB = [0,3];     // 일(0), 수(3) — 9~12회차
   const eduDates = [];
   let week = 0;
   while(eduDates.length < 8){
-    for(const offset of eduWeekdayOffsets){
+    for(const offset of eduWeekdayOffsetsA){
       if(eduDates.length >= 8) break;
+      const d = addDays(eduStartSunday, week*7 + offset);
+      if(!findHoliday(fmtDateLocal(d))) eduDates.push(d);
+    }
+    week++;
+  }
+  while(eduDates.length < 12){
+    for(const offset of eduWeekdayOffsetsB){
+      if(eduDates.length >= 12) break;
       const d = addDays(eduStartSunday, week*7 + offset);
       if(!findHoliday(fmtDateLocal(d))) eduDates.push(d);
     }
@@ -855,11 +888,7 @@ function buildDecor(cfg){
 function render(){
   document.getElementById('title').textContent = `${YEAR}년 ${MONTH}월`;
 
-  const classStart = new Date(YEAR, MONTH-1 - CLASS_DURATION_MONTHS, 1);
-  const classStartYear = classStart.getFullYear();
-  const classStartMonth = classStart.getMonth() + 1;
-  document.getElementById('termLabel').textContent =
-    `신 ${classStartYear - SINYEAR_OFFSET}(${classStartYear})년 ${classStartMonth}월 개강반`;
+  document.getElementById('termLabel').textContent = classStartLabel(YEAR, MONTH);
 
   const cfg = MONTHS[MONTH];
   document.documentElement.setAttribute('data-season', cfg.season);
@@ -974,11 +1003,18 @@ function render(){
       icon.textContent = CATEGORY_ICONS[e.category] || '';
       el.appendChild(icon);
 
+      const termEndDate = parseLocalDate(e.termEnd);
+      const termLine = document.createElement('div');
+      termLine.className = 'event-term';
+      termLine.textContent = classStartLabel(termEndDate.getFullYear(), termEndDate.getMonth() + 1);
+      termLine.title = termLine.textContent;
+
       if(e.round){
         const line = document.createElement('div');
         line.className = 'event-line';
         line.innerHTML = `<span class="event-cat">${e.category}</span><span class="round-num">${e.round}</span><span class="round-unit">회차</span>`;
         el.appendChild(line);
+        el.appendChild(termLine);
 
         const excludeBtn = document.createElement('button');
         excludeBtn.className = 'event-exclude-btn';
@@ -998,6 +1034,7 @@ function render(){
         cat.className = 'event-cat event-solo';
         cat.textContent = e.category;
         el.appendChild(cat);
+        el.appendChild(termLine);
 
         if(e.category === '서류완료'){
           const moveBtn = document.createElement('button');
