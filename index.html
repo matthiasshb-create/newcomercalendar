@@ -22,7 +22,7 @@
   /* 계절/월별 색상은 아래 스크립트의 MONTHS 테이블에서 JS로 직접 지정됩니다. */
 
   *{box-sizing:border-box;}
-  html,body{height:100%;}
+  html,body{min-height:100%;}
   body{
     margin:0;
     font-family:"Pretendard","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
@@ -31,7 +31,7 @@
     transition:background 0.8s ease;
     color:var(--text);
     padding:20px 14px;
-    overflow:hidden;
+    overflow-y:auto;
     display:flex;
     flex-direction:column;
   }
@@ -601,6 +601,7 @@
         <select id="addExtraCategory">
           <option value="주일예배">주일예배</option>
           <option value="새신자교육" selected>새신자교육</option>
+          <option value="새신자 예배">새신자 예배</option>
           <option value="서류완료">서류완료</option>
         </select>
         <select id="addExtraTermEnd"></select>
@@ -713,12 +714,14 @@ function classStartKey(year, month){
 const CATEGORIES = {
   "주일예배":   "#3b6ef6",
   "새신자교육": "#22a06b",
+  "새신자 예배": "#1a9e8f",
   "종강일":     "#e0523f",
   "서류완료":   "#8e5ec9",
 };
 const CATEGORY_ICONS = {
   "주일예배":   "🙏",
   "새신자교육": "📖",
+  "새신자 예배": "🕊️",
   "종강일":     "🎓",
   "서류완료":   "📋",
 };
@@ -825,31 +828,34 @@ function computeEvents(termEndStr, tentative){
   }
   pushRoundedEvents_(events, worshipDates.reverse().map(fmtDateLocal), "주일예배", tentative, termEndStr);
 
-  // 새신자교육 총 12회: 1~8회차는 일,월,수,목 반복(2주), 8회차가 끝나면 이어서
-  // 9~12회차는 일,수 반복(2주)로 전환. eduStartSunday부터 시작해 공휴일은 건너뛰고 채움.
-  // week 카운터를 두 구간이 공유해서, 공휴일 때문에 1~8회차가 예정보다 늦게 끝나도
-  // 9회차부터는 그 다음 주부터 자연스럽게 이어짐.
-  const eduWeekdayOffsetsA = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4) — 1~8회차
-  const eduWeekdayOffsetsB = [0,3];     // 일(0), 수(3) — 9~12회차
-  const eduDates = [];
+  // 새신자교육 1~8회차(일,월,수,목 반복, 2주), eduStartSunday부터 시작해 공휴일은 건너뛰고 채움.
+  const eduWeekdayOffsetsA = [0,1,3,4]; // 일(0), 월(1), 수(3), 목(4)
+  const eduDatesA = [];
   let week = 0;
-  while(eduDates.length < 8){
+  while(eduDatesA.length < 8){
     for(const offset of eduWeekdayOffsetsA){
-      if(eduDates.length >= 8) break;
+      if(eduDatesA.length >= 8) break;
       const d = addDays(eduStartSunday, week*7 + offset);
-      if(!findHoliday(fmtDateLocal(d))) eduDates.push(d);
+      if(!findHoliday(fmtDateLocal(d))) eduDatesA.push(d);
     }
     week++;
   }
-  while(eduDates.length < 12){
+  pushRoundedEvents_(events, eduDatesA.map(fmtDateLocal), "새신자교육", tentative, termEndStr);
+
+  // 새신자교육 8회차가 끝나면 이어서 "새신자 예배" 1~4회차(일,수 반복, 2주)로 전환.
+  // 별도 카테고리로 분리해 회차 번호가 1부터 다시 매겨짐. week 카운터를 이어받아서,
+  // 공휴일 때문에 1~8회차가 예정보다 늦게 끝나도 그 다음 주부터 자연스럽게 이어짐.
+  const eduWeekdayOffsetsB = [0,3]; // 일(0), 수(3)
+  const eduDatesB = [];
+  while(eduDatesB.length < 4){
     for(const offset of eduWeekdayOffsetsB){
-      if(eduDates.length >= 12) break;
+      if(eduDatesB.length >= 4) break;
       const d = addDays(eduStartSunday, week*7 + offset);
-      if(!findHoliday(fmtDateLocal(d))) eduDates.push(d);
+      if(!findHoliday(fmtDateLocal(d))) eduDatesB.push(d);
     }
     week++;
   }
-  pushRoundedEvents_(events, eduDates.map(fmtDateLocal), "새신자교육", tentative, termEndStr);
+  pushRoundedEvents_(events, eduDatesB.map(fmtDateLocal), "새신자 예배", tentative, termEndStr);
 
   // 종강일
   events.push({ date: termEndStr, category: "종강일", round: null, tentative, termEnd: termEndStr });
@@ -945,7 +951,6 @@ function render(){
   const categoryOrder = Object.keys(CATEGORIES);
 
   const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
-  grid.style.gridTemplateRows = `repeat(${totalCells/7}, 1fr)`;
 
   for(let i=0;i<totalCells;i++){
     const dayOffset = i - startWeekday + 1;
