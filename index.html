@@ -364,6 +364,7 @@
   .events[data-count="3"] .event-icon{ font-size:11px; top:4px; left:6px; }
   .events[data-count="3"] .event-term{ display:none; } /* 박스가 너무 작아지면 개강반 표시는 생략 */
   .event.tentative::before{ display:none; }
+  .event.other-term::before{ display:none; }
   .tentative-badge{
     position:absolute;
     top:6px;
@@ -683,6 +684,13 @@ function classStartLabel(year, month){
   return `신 ${cy - SINYEAR_OFFSET}(${cy})년 ${cm}월 개강반`;
 }
 
+// classStartLabel과 같은 계산으로 "YYYY-M" 키만 반환 — 두 개강반이 같은 기수인지
+// 비교할 때 사용(화면에 보이는 달의 "메인 개강반"과 각 이벤트의 개강반이 같은지 판별).
+function classStartKey(year, month){
+  const classStart = new Date(year, month-1 - CLASS_DURATION_MONTHS, 1);
+  return `${classStart.getFullYear()}-${classStart.getMonth()}`;
+}
+
 // 3) 카테고리별 색상 / 아이콘
 const CATEGORIES = {
   "주일예배":   "#3b6ef6",
@@ -889,6 +897,7 @@ function render(){
   document.getElementById('title').textContent = `${YEAR}년 ${MONTH}월`;
 
   document.getElementById('termLabel').textContent = classStartLabel(YEAR, MONTH);
+  const displayClassKey = classStartKey(YEAR, MONTH);
 
   const cfg = MONTHS[MONTH];
   document.documentElement.setAttribute('data-season', cfg.season);
@@ -975,18 +984,27 @@ function render(){
 
     dayEvents.forEach(e => {
       const base = CATEGORIES[e.category] || '#888';
+      const termEndForE = parseLocalDate(e.termEnd);
+      const isPrimaryCohort = classStartKey(termEndForE.getFullYear(), termEndForE.getMonth()+1) === displayClassKey;
       const el = document.createElement('div');
-      el.className = e.tentative ? 'event tentative' : 'event';
+      el.className = e.tentative ? 'event tentative' : (isPrimaryCohort ? 'event' : 'event other-term');
       if(e.tentative){
         el.style.background = hexToRgba(base, .14);
         el.style.border = `2px dashed ${base}`;
+        el.style.color = base;
+        el.style.boxShadow = 'none';
+      } else if(!isPrimaryCohort){
+        // 화면에 보이는 달의 "메인 개강반"이 아닌 다른 개강반 소속 이벤트는 연하게 표시해
+        // 중요도(지금 신경 써야 할 기수)를 시각적으로 구분한다.
+        el.style.background = hexToRgba(base, .16);
+        el.style.border = `1.5px solid ${hexToRgba(base, .45)}`;
         el.style.color = base;
         el.style.boxShadow = 'none';
       } else {
         el.style.background = `linear-gradient(150deg, ${shadeColor(base, 10)}, ${shadeColor(base, -16)})`;
         el.style.boxShadow = `0 6px 14px ${hexToRgba(base, .38)}`;
       }
-      el.title = (e.round ? `${e.category} ${e.round}회차` : e.category) + (e.tentative ? ' (예정)' : '');
+      el.title = (e.round ? `${e.category} ${e.round}회차` : e.category) + (e.tentative ? ' (예정)' : '') + (!e.tentative && !isPrimaryCohort ? ' (다른 개강반)' : '');
 
       if(e.tentative){
         const badge = document.createElement('div');
