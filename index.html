@@ -1101,7 +1101,10 @@ function exportImage(){
   try{
     const source = document.querySelector('.wrap');
     const clone = source.cloneNode(true);
-    clone.querySelectorAll('.sidebar, .term-bar, .nav-btns').forEach(el => el.remove());
+    // .term-filter 안의 체크박스(<input>)는 HTML로 직렬화되면 닫는 태그가 없는 void
+    // element라서, SVG foreignObject가 요구하는 엄격한 XML 파싱이 깨져 이미지 로드가
+    // 실패한다(예: input이 label과 태그 불일치로 판정됨) — 그래서 통째로 제외한다.
+    clone.querySelectorAll('.sidebar, .term-bar, .nav-btns, .term-filter').forEach(el => el.remove());
     clone.style.maxWidth = 'none';
     clone.style.width = '1100px';
 
