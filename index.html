@@ -186,6 +186,15 @@
   }
   .confirmed-chip button:hover{background:var(--sun);color:#fff;}
 
+  #addedList{
+    max-height:240px;
+    overflow-y:auto;
+    padding-right:4px;
+    align-content:flex-start;
+  }
+  #addedList::-webkit-scrollbar{width:6px;}
+  #addedList::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
   .list-toggle-btn{
     border:1px dashed var(--border);
     background:transparent;
