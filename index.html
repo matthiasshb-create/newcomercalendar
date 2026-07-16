@@ -186,6 +186,19 @@
   }
   .confirmed-chip button:hover{background:var(--sun);color:#fff;}
 
+  .list-toggle-btn{
+    border:1px dashed var(--border);
+    background:transparent;
+    color:var(--muted);
+    border-radius:20px;
+    padding:5px 14px;
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .list-toggle-btn:hover{background:#f2f3f6;color:var(--text);}
+
   .legend{display:flex;gap:14px;margin-bottom:14px;flex-wrap:wrap;}
   .legend-item{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);}
   .legend-dot{width:10px;height:10px;border-radius:50%;}
@@ -1212,11 +1225,16 @@ function renderConfirmedList(){
   }
 }
 
+const ADDED_LIST_COLLAPSE_COUNT = 5;
+let addedListExpanded = false;
+
 function renderAddedList(){
   const wrap = document.getElementById('addedList');
   if(!wrap) return;
   wrap.innerHTML = '';
-  ADDED_DATES.slice().sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0).forEach(item => {
+  const sorted = ADDED_DATES.slice().sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
+  const visible = addedListExpanded ? sorted : sorted.slice(0, ADDED_LIST_COLLAPSE_COUNT);
+  visible.forEach(item => {
     const chip = document.createElement('span');
     chip.className = 'confirmed-chip';
     chip.textContent = `${item.date} (${item.category}, ${item.termEnd} 기수) `;
@@ -1227,6 +1245,14 @@ function renderAddedList(){
     chip.appendChild(btn);
     wrap.appendChild(chip);
   });
+  const hiddenCount = sorted.length - ADDED_LIST_COLLAPSE_COUNT;
+  if(hiddenCount > 0){
+    const toggle = document.createElement('button');
+    toggle.className = 'list-toggle-btn';
+    toggle.textContent = addedListExpanded ? '접기 ▲' : `더보기 (${hiddenCount}개 더) ▼`;
+    toggle.onclick = () => { addedListExpanded = !addedListExpanded; renderAddedList(); };
+    wrap.appendChild(toggle);
+  }
 }
 
 // 사이드바 "회차 추가" 폼의 기수 선택 드롭다운을 CONFIRMED_TERM_ENDS(+예정)로 채움 —
